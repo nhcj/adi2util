@@ -48,47 +48,68 @@ struct StatusMessage {
 }
 
 #[derive(Debug)]
-enum Parameters {
-    Channel(ChannelParameters),
-    //Device(DeviceParameters),
+struct Parameters {
+    channel: Vec<ChannelParameterStatus>,
+    device: Vec<DeviceParameterStatus>,
+}
+
+#[derive(Debug)]
+struct ChannelParameterMessage {
+    address: u8,
+    index: u8,
+    value: i16,
 }
 
 #[derive(Debug)]
 struct ChannelParameters {
-    parameters: Vec<ChannelParameter>,
+    parameters: Vec<ChannelParameterStatus>,
 }
 
 #[derive(Debug)]
-struct ChannelParameter {
+struct ChannelParameterStatus {
     address: ChannelAddress,
-    parameter_value: Option<ChannelParameterValue>,
+    parameter: ChannelParameter,
+    value: i16,
 }
 
 #[derive(Debug)]
-enum ChannelParameterValue {
-    Source(i16),
-    RefLevel(i16),
-    AutoRefLevel(i16),
-    Mono(i16),
-    Width(i16),
-    MSProc(i16),
-    Polarity(i16),
-    Crossfeed(i16),
-    DAFilter(i16),
-    DeEmphasis(i16),
-    DualEQ(i16),
-    Volume(i16),
-    LockVolume(i16),
-    Balance(i16),
-    Mute(i16),
-    Dim(i16),
-    LoopbackToUSB(i16),
-    DigDCProtection(i16),
-    RearTRSSource(i16),
-    LoudnessEnable(i16),
-    LoudnessBassGain(i16),
-    LoudnessTrebleGain(i16),
-    LoudnessLowVolRef(i16),
+struct DeviceParameterMessage {
+    index: u8,
+    value: u16,
+}
+
+#[derive(Debug)]
+struct DeviceParameterStatus {
+    parameter: DeviceParameter,
+    value: u16,
+}
+
+#[repr(u8)]
+#[derive(Debug)]
+enum ChannelParameter {
+    Source = 1,
+    RefLevel,
+    AutoRefLevel,
+    Mono,
+    Width,
+    MSProc,
+    Polarity,
+    Crossfeed,
+    DAFilter,
+    DeEmphasis,
+    DualEQ,
+    Volume,
+    LockVolume,
+    Balance,
+    Mute,
+    Dim,
+    LoopbackToUSB,
+    DigDCProtection,
+    RearTRSSource,
+    LoudnessEnable,
+    LoudnessBassGain,
+    LoudnessTrebleGain,
+    LoudnessLowVolRef,
 }
 
 #[derive(Clone, Debug)]
@@ -98,34 +119,92 @@ enum ChannelAddress {
     Unexpected(u8),
 }
 
-impl TryFrom<(u8, i16)> for ChannelParameterValue {
+#[repr(u8)]
+#[derive(Debug)]
+enum DeviceParameter {
+    MuteLineVs = 1,
+    AutoStandby = 2,
+    DSDDetection = 3,
+    DSDFilter = 4,
+    DSDDirectLine = 5,
+    BasicMode = 6,
+    DigitalOutSource = 7,
+    DualPhones = 8,
+    BalTRSPhonesMode = 9,
+    TogglePhonesLine = 10,
+    MuteLineVsPH12 = 11,
+    MuteLineVsPH34 = 12,
+    ClockSource = 15,
+    SampleRate = 16,
+    RemapKeysIR5 = 22,
+    RemapKeysIR6 = 23,
+    RemapKeysIR7 = 24,
+    RemapKeys = 25,
+    RemapKeysVOL = 26,
+    RemapKeysIO = 27,
+    RemapKeysEQ = 28,
+    RemapKeysSETUP = 29,
+    DisplayMode = 32,
+    MeterColor = 33,
+    HorMeter = 34,
+    AutoDarkMode = 35,
+    ShowVolScreen = 36,
+    LockUI = 37,
+    SPDIFInput = 40,
+    SRCMode = 41,
+    SRCGainDig = 42,
+    OpticalOutSource = 43,
+}
+
+impl TryFrom<u8> for ChannelParameter {
     type Error = &'static str;
-    fn try_from(param: (u8, i16)) -> Result<Self, Self::Error> {
-        match param.0 {
-            1 => Ok(ChannelParameterValue::Source(param.1)),
-            2 => Ok(ChannelParameterValue::RefLevel(param.1)),
-            3 => Ok(ChannelParameterValue::AutoRefLevel(param.1)),
-            4 => Ok(ChannelParameterValue::Mono(param.1)),
-            5 => Ok(ChannelParameterValue::Width(param.1)),
-            6 => Ok(ChannelParameterValue::MSProc(param.1)),
-            7 => Ok(ChannelParameterValue::Polarity(param.1)),
-            8 => Ok(ChannelParameterValue::Crossfeed(param.1)),
-            9 => Ok(ChannelParameterValue::DAFilter(param.1)),
-            10 => Ok(ChannelParameterValue::DeEmphasis(param.1)),
-            11 => Ok(ChannelParameterValue::DualEQ(param.1)),
-            12 => Ok(ChannelParameterValue::Volume(param.1)),
-            13 => Ok(ChannelParameterValue::LockVolume(param.1)),
-            14 => Ok(ChannelParameterValue::Balance(param.1)),
-            15 => Ok(ChannelParameterValue::Mute(param.1)),
-            16 => Ok(ChannelParameterValue::Dim(param.1)),
-            17 => Ok(ChannelParameterValue::LoopbackToUSB(param.1)),
-            18 => Ok(ChannelParameterValue::DigDCProtection(param.1)),
-            19 => Ok(ChannelParameterValue::RearTRSSource(param.1)),
-            20 => Ok(ChannelParameterValue::LoudnessEnable(param.1)),
-            21 => Ok(ChannelParameterValue::LoudnessBassGain(param.1)),
-            22 => Ok(ChannelParameterValue::LoudnessTrebleGain(param.1)),
-            23 => Ok(ChannelParameterValue::LoudnessLowVolRef(param.1)),
-            _ => Err("Invalid channel parameter index"),
+    fn try_from(param: u8) -> Result<Self, Self::Error> {
+        if param >= ChannelParameter::Source as u8
+            && param <= ChannelParameter::LoudnessLowVolRef as u8
+        {
+            return Ok(unsafe { std::mem::transmute(param) });
+        }
+        Err(("Invalid channel parameter index"))
+    }
+}
+
+impl TryFrom<u8> for DeviceParameter {
+    type Error = &'static str;
+    fn try_from(param: u8) -> Result<Self, Self::Error> {
+        match param {
+            1 => Ok(DeviceParameter::MuteLineVs),
+            2 => Ok(DeviceParameter::AutoStandby),
+            3 => Ok(DeviceParameter::DSDDetection),
+            4 => Ok(DeviceParameter::DSDFilter),
+            5 => Ok(DeviceParameter::DSDDirectLine),
+            6 => Ok(DeviceParameter::BasicMode),
+            7 => Ok(DeviceParameter::DigitalOutSource),
+            8 => Ok(DeviceParameter::DualPhones),
+            9 => Ok(DeviceParameter::BalTRSPhonesMode),
+            10 => Ok(DeviceParameter::TogglePhonesLine),
+            11 => Ok(DeviceParameter::MuteLineVsPH12),
+            12 => Ok(DeviceParameter::MuteLineVsPH34),
+            15 => Ok(DeviceParameter::ClockSource),
+            16 => Ok(DeviceParameter::SampleRate),
+            22 => Ok(DeviceParameter::RemapKeysIR5),
+            23 => Ok(DeviceParameter::RemapKeysIR6),
+            24 => Ok(DeviceParameter::RemapKeysIR7),
+            25 => Ok(DeviceParameter::RemapKeys),
+            26 => Ok(DeviceParameter::RemapKeysVOL),
+            27 => Ok(DeviceParameter::RemapKeysIO),
+            28 => Ok(DeviceParameter::RemapKeysEQ),
+            29 => Ok(DeviceParameter::RemapKeysSETUP),
+            32 => Ok(DeviceParameter::DisplayMode),
+            33 => Ok(DeviceParameter::MeterColor),
+            34 => Ok(DeviceParameter::HorMeter),
+            35 => Ok(DeviceParameter::AutoDarkMode),
+            36 => Ok(DeviceParameter::ShowVolScreen),
+            37 => Ok(DeviceParameter::LockUI),
+            40 => Ok(DeviceParameter::SPDIFInput),
+            41 => Ok(DeviceParameter::SRCMode),
+            42 => Ok(DeviceParameter::SRCGainDig),
+            43 => Ok(DeviceParameter::OpticalOutSource),
+            _ => Err("Invalid device parameter index"),
         }
     }
 }
@@ -140,67 +219,83 @@ fn create_bytes(output: Output, index: u8, value: i16) -> [u8; 3] {
     [first_byte, second_byte, third_byte]
 }
 
-impl TryFrom<&[u8]> for ChannelParameters {
+impl TryFrom<DeviceParameterMessage> for DeviceParameterStatus {
     type Error = &'static str;
-    fn try_from(data: &[u8]) -> Result<Self, Self::Error> {
-        let parameters_count = data.len() / 3;
-        let mut parameters = Vec::new();
+    fn try_from(msg: DeviceParameterMessage) -> Result<Self, Self::Error> {
+        let parameter = DeviceParameter::try_from(msg.index)?;
 
-        for i in 0..parameters_count {
-            let address = match data[i * 3] >> 3 {
-                a @ (3 | 6 | 9) => ChannelAddress::Output(Output::try_from((a / 3) - 1)?),
-                a @ 1..=14 => ChannelAddress::Unsupported(a),
-                a => ChannelAddress::Unexpected(a),
-            };
-
-            match address {
-                ChannelAddress::Unsupported(_) | ChannelAddress::Unexpected(_) => continue,
-                _ => {}
-            }
-
-            let first_byte = data[i * 3];
-            let second_byte = data[i * 3 + 1];
-            let third_byte = data[i * 3 + 2] as i16;
-
-            let index = (first_byte & 0x07) << 2 | (second_byte & 0x60) >> 5;
-            // parameter values are signed 12-bit
-            let value = match ((second_byte & 0x1F) as i16) << 7 | third_byte {
-                value if value & 0x800 != 0 => value | !0xFFF,
-                value => value,
-            };
-
-            let parameter_value = ChannelParameterValue::try_from((index, value))?;
-
-            parameters.push(ChannelParameter {
-                address,
-                parameter_value: Some(parameter_value),
-            })
-        }
-
-        Ok(ChannelParameters { parameters })
+        Ok(DeviceParameterStatus {
+            parameter,
+            value: msg.value,
+        })
     }
 }
 
-//impl TryFrom<&[u8]> for DeviceParameter {
-//    type Error = &'static str;
-//    fn try_from(data: &[u8]) -> Result<Self, Self::Error> {
-//    }
-//}
+impl TryFrom<ChannelParameterMessage> for ChannelParameterStatus {
+    type Error = &'static str;
+    fn try_from(msg: ChannelParameterMessage) -> Result<Self, Self::Error> {
+        let address = match msg.address {
+            a @ (3 | 6 | 9) => ChannelAddress::Output(Output::try_from((a / 3) - 1)?),
+            a @ 1..=14 => ChannelAddress::Unsupported(a),
+            a => ChannelAddress::Unexpected(a),
+        };
+        let parameter = ChannelParameter::try_from(msg.index)?;
+
+        Ok(ChannelParameterStatus {
+            address,
+            parameter,
+            value: msg.value,
+        })
+    }
+}
 
 impl TryFrom<&[u8]> for Parameters {
     type Error = &'static str;
 
     fn try_from(data: &[u8]) -> Result<Self, Self::Error> {
-        Ok(Parameters::Channel(ChannelParameters::try_from(data)?))
-        //let address = data[0] >> 3;
-        //match address {
-        //12 => Ok(Parameters::Device(DeviceParameter::try_from(data)?)),
-        //_ => Ok(Parameters::Channel(ChannelParameters::try_from(data)?)),
-        //}
+        let parameters_count = data.len() / 3;
+        let mut channel_parameters = Vec::new();
+        let mut device_parameters = Vec::new();
+
+        for i in 0..parameters_count {
+            let first_byte = data[i * 3];
+            let second_byte = data[i * 3 + 1];
+
+            let address = first_byte >> 3;
+            if address == 12 {
+                let third_byte = data[i * 3 + 2] as u16;
+
+                let index = (first_byte & 0x07) << 3 | (second_byte & 0x70) >> 4;
+                let value = ((second_byte & 0xF) as u16) << 7 | third_byte;
+
+                let msg = DeviceParameterMessage { index, value };
+                let device_parameter = DeviceParameterStatus::try_from(msg)?;
+                device_parameters.push(device_parameter);
+            } else {
+                let third_byte = data[i * 3 + 2] as i16;
+
+                let index = (first_byte & 0x07) << 2 | (second_byte & 0x60) >> 5;
+                // channel parameter values are signed 12-bit
+                let value = match ((second_byte & 0x1F) as i16) << 7 | third_byte {
+                    value if value & 0x800 != 0 => value | !0xFFF,
+                    value => value,
+                };
+
+                let msg = ChannelParameterMessage {
+                    address,
+                    index,
+                    value,
+                };
+                let channel_parameter = ChannelParameterStatus::try_from(msg)?;
+                channel_parameters.push(channel_parameter);
+            }
+        }
+        Ok(Parameters {
+            channel: channel_parameters,
+            device: device_parameters,
+        })
     }
 }
-
-//struct DeviceParameter {}
 
 impl TryFrom<&[u8]> for ADI2Message {
     type Error = &'static str;
