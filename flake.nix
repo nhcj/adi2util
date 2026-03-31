@@ -1,26 +1,25 @@
 {
   inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs/release-25.11";
-    flake-utils.url = "github:numtide/flake-utils";
+    nixpkgs.url = "github:nixos/nixpkgs/nixpkgs-unstable";
     rust-overlay.url = "github:oxalica/rust-overlay";
+    rust-overlay.inputs.nixpkgs.follows = "nixpkgs";
   };
 
-  outputs = { nixpkgs, flake-utils, rust-overlay, ... }:
-    flake-utils.lib.eachDefaultSystem(system:
-      let
-        overlays = [ (import rust-overlay) ];
-        pkgs = import nixpkgs {
-          inherit overlays system;
-        };
-      in
-      {
-        devShells.default = pkgs.mkShell {
-          buildInputs = with pkgs; [
-            alsa-lib
-            pkg-config
-            rust-bin.stable.latest.complete
-          ];
-        };
-      }
-    );
+  outputs = { nixpkgs, rust-overlay, ... }: let
+    platforms = [ "x86_64-linux" ];
+    forAllPlatforms = f: nixpkgs.lib.genAttrs platforms (system: f (import nixpkgs {
+      inherit system;
+      overlays = [ rust-overlay.overlays.default ];
+    }));
+  in {
+    devShells = forAllPlatforms (pkgs: {
+      default = pkgs.mkShell {
+        buildInputs = with pkgs; [
+          alsa-lib
+          pkg-config
+          rust-bin.stable.latest.complete
+        ];
+      };
+    });
+  };
 }
