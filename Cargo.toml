@@ -1,7 +1,9 @@
-[package]
-name = "adi2ctl"
-version = "0.1.0"
-edition = "2024"
+[workspace]
+resolver = "3"
+members = [
+  "crates/adi2",
+  "crates/adi2ctl",
+  "crates/adi2d"
+]
 
-[dependencies]
-midir = "0.10"
+[workspace.dependencies]
