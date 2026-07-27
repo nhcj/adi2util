@@ -1,3 +1,13 @@
+trait ADIMidiParameter: Sized {
+    type Error;
+
+    // Address is not applicable to device parameters, so it is always None with
+    // them and always Some with channel parameters.
+    fn from_midi_bytes(address: Option<u8>, index: u8, value: ParameterValue) -> Result<Self, Self::Error>;
+
+    fn to_midi_bytes(&self) -> Result<[u8; 3], Self::Error>;
+}
+
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, PartialEq)]
 enum Output {
@@ -26,6 +36,12 @@ impl TryFrom<u8> for Output {
 }
 
 #[derive(Debug)]
+enum ParameterValue {
+    ChannelValue(i16),
+    DeviceValue(u16),
+}
+
+#[derive(Debug)]
 enum Message {
     Status(StatusMessage),
     Parameters(Parameters),
@@ -49,6 +65,40 @@ struct ChannelParameter {
     value: i16,
 }
 
+impl ADIMidiParameter for ChannelParameter {
+    type Error = ();
+
+    fn from_midi_bytes(address: Option<u8>, index: u8, value: ParameterValue) -> Result<Self, ()> {
+        let address = match address.expect("address is always provided for channel parameters") {
+            a @ (3|6|9) => ChannelAddress::Output(Output::try_from((a / 3) - 1)?),
+            a @ 1..=14 => ChannelAddress::Unsupported(a),
+            a => ChannelAddress::Unexpected(a),
+        };
+        let parameter = ChannelParameterType::try_from(index)?;
+        let ParameterValue::ChannelValue(value) = value else { unreachable!() };
+
+        Ok(ChannelParameter {
+            address,
+            parameter,
+            value,
+        })
+    }
+
+    fn to_midi_bytes(&self) -> Result<[u8; 3], ()> {
+        let address = if let ChannelAddress::Output(output) = self.address {
+            output.channel_address()
+        } else {
+            return Err(());
+        };
+        let index = self.parameter as u8;
+        let first_byte = (address << 3) | (index & 0x1C) >> 2;
+        let second_byte = (index & 0x03) << 5 | ((self.value & 0x800) >> 7) as u8 | ((self.value >> 7) & 0xF) as u8;
+        let third_byte = (self.value & 0x7F) as u8;
+        Ok([first_byte, second_byte, third_byte])
+    }
+}
+
+
 #[derive(Clone, Debug)]
 enum ChannelAddress {
     Output(Output),
@@ -60,6 +110,33 @@ enum ChannelAddress {
 struct DeviceParameter {
     parameter: DeviceParameterType,
     value: u16,
+}
+
+impl ADIMidiParameter for DeviceParameter {
+    type Error = ();
+
+    fn from_midi_bytes(_: Option<u8>, index: u8, value: ParameterValue) -> Result<Self, Self::Error> {
+        let parameter = DeviceParameterType::try_from(index)?;
+        let ParameterValue::DeviceValue(value) = value else { unreachable!() };
+
+        Ok(DeviceParameter {
+            parameter,
+            value,
+        })
+    }
+
+    fn to_midi_bytes(&self) -> Result<[u8; 3], Self::Error> {
+        // device parameter values are unsigned 11-bit
+        if self.value > 0x7FF {
+            return Err(());
+        }
+        let index = self.parameter as u8;
+        // device parameters always use address 12
+        let first_byte = (12 << 3) | (index & 0x38) >> 3;
+        let second_byte = (index & 0x07) << 4 | ((self.value >> 7) & 0xF) as u8;
+        let third_byte = (self.value & 0x7F) as u8;
+        Ok([first_byte, second_byte, third_byte])
+    }
 }
 
 #[repr(u8)]
