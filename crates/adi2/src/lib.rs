@@ -1,14 +1,5 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
+mod device_headers {
+    const ADI_2_DAC_FS: &[u8] = &[0xF0, 0x00, 0x20, 0x0D, 0x71];
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+pub mod midi;
