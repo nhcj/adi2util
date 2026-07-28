@@ -22,6 +22,7 @@ impl State {
         prev
     }
 
+    // Assumes the active output if address not given
     pub fn get_channel_parameter_value(&self, address: Option<ChannelAddress>, _type: ChannelParameterType) -> Option<i16> {
         let address = address.or_else(|| self.active_output.map(Into::into))?;
         self.channel_parameters.get(&address)?.get(&_type).copied()
