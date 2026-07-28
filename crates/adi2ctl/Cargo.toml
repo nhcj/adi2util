@@ -5,3 +5,4 @@ edition = "2024"
 
 [dependencies]
 adi2 = { path = "../adi2" }
+clap = { workspace = true }

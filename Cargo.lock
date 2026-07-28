@@ -14,6 +14,7 @@ name = "adi2ctl"
 version = "0.1.0"
 dependencies = [
  "adi2",
+ "clap",
 ]
 
 [[package]]
