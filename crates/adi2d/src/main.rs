@@ -1,12 +1,12 @@
 mod midi_client;
 mod server;
 
-use adi2::{devices, midi::{ChannelParameterType, Message}};
+use adi2::{devices, ipc::{GetRequest, Request, Response, SetRequest}, midi::{ChannelParameter, ChannelParameterType, Message}};
 use clap::{Parser, Subcommand};
 
 use adi2::state::State;
 
-use crate::server::Server;
+use crate::{midi_client::MidiCommands, server::Server};
 
 #[derive(Parser)]
 #[command(version, about)]
@@ -40,9 +40,37 @@ fn main() -> std::io::Result<()> {
                         }
                     }
                 }
-});
-            let mut server = Server::new("/tmp/adi2d.sock", state.clone());
-            server.start()?;
+            });
+
+            let mut server = Server::new("/tmp/adi2d.sock");
+            server.start(|req| {
+                let state = state.read().unwrap();
+                match req {
+                    Request::Get(g) => {
+                        match g {
+                            GetRequest::State => Response::State(state.clone()),
+                            GetRequest::ChannelParameter(address, _type) => Response::ChannelParameter(state.get_channel_parameter_value(Some(address), _type)),
+                            GetRequest::DeviceParameter(_type) => Response::DeviceParameter(state.get_device_parameter_value(_type)),
+                        }
+                    }
+                    Request::Set(s) => {
+                        match s {
+                            SetRequest::CurrentChannelParameter(_type, value) => {
+                                let Some(active_output) = state.active_output else { return Response::Err(()); };
+                                let param = ChannelParameter {
+                                    address: active_output.into(),
+                                    parameter: _type,
+                                    value,
+                                };
+                                client.send_command(MidiCommands::SendParameterToDevice, Some(param)).unwrap();
+                            }
+                            SetRequest::ChannelParameter(param) => { client.send_command(MidiCommands::SendParameterToDevice, Some(param)).unwrap(); }
+                            SetRequest::DeviceParameter(param) => { client.send_command(MidiCommands::SendParameterToDevice, Some(param)).unwrap(); }
+                        }
+                        Response::Ok
+                    }
+                }
+            })?;
 
             loop {
                 println!("{:?}", state.read().unwrap().get_channel_parameter_value(None, ChannelParameterType::Volume));
