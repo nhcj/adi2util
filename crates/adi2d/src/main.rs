@@ -1,4 +1,4 @@
-mod client;
+mod midi_client;
 mod server;
 
 use adi2::midi::{ChannelParameterType, Message};
@@ -28,7 +28,7 @@ fn main() -> std::io::Result<()> {
 
     match cli.command.unwrap_or(Commands::Run) {
         Commands::Run => {
-            let mut client = client::MidiClient::from_port_name("ADI-2", move |message, _| {
+            let mut client = midi_client::MidiClient::from_port_name("ADI-2", move |message, _| {
                 let mut state = state_.write().unwrap();
                 match message {
                     Message::Status(status) => {
