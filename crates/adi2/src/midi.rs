@@ -10,7 +10,7 @@ trait ADIMidiParameter: Sized {
 
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, PartialEq)]
-enum Output {
+pub enum Output {
     Line = 0,
     Phones = 1,
     IEMs = 2,
@@ -42,24 +42,24 @@ enum ParameterValue {
 }
 
 #[derive(Debug)]
-enum Message {
+pub enum Message {
     Status(StatusMessage),
     Parameters(Parameters),
 }
 
 #[derive(Debug)]
-struct StatusMessage {
+pub struct StatusMessage {
     active_output: Output,
 }
 
 #[derive(Debug)]
-struct Parameters {
+pub struct Parameters {
     channel: Vec<ChannelParameter>,
     device: Vec<DeviceParameter>,
 }
 
 #[derive(Debug)]
-struct ChannelParameter {
+pub struct ChannelParameter {
     address: ChannelAddress,
     parameter: ChannelParameterType,
     value: i16,
@@ -100,14 +100,14 @@ impl ADIMidiParameter for ChannelParameter {
 
 
 #[derive(Clone, Debug)]
-enum ChannelAddress {
+pub enum ChannelAddress {
     Output(Output),
     Unsupported(u8),
     Unexpected(u8),
 }
 
 #[derive(Debug)]
-struct DeviceParameter {
+pub struct DeviceParameter {
     parameter: DeviceParameterType,
     value: u16,
 }
