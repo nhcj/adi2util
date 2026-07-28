@@ -5,9 +5,9 @@ use crate::state::State;
 
 use bitcode::{Decode, Encode};
 
-pub trait Message<'a>: bitcode::Encode + bitcode::Decode<'a> {}
-impl<'a> Message<'a> for Request {}
-impl<'a> Message<'a> for Response {}
+pub trait IPCMessage<'a>: bitcode::Encode + bitcode::Decode<'a> {}
+impl<'a> IPCMessage<'a> for Request {}
+impl<'a> IPCMessage<'a> for Response {}
 
 #[derive(Debug, Decode, Encode)]
 pub enum Request {
@@ -38,7 +38,7 @@ pub enum Response {
     Err(()),
 }
 
-pub fn read_message<M: for<'a> Message<'a>>(mut stream: impl Read) -> std::io::Result<M> {
+pub fn read_message<M: for<'a> IPCMessage<'a>>(mut stream: impl Read) -> std::io::Result<M> {
     let mut size_buffer = [0; 4];
     stream.read_exact(&mut size_buffer)?;
     let size = u32::from_be_bytes(size_buffer) as usize;
@@ -47,7 +47,7 @@ pub fn read_message<M: for<'a> Message<'a>>(mut stream: impl Read) -> std::io::R
     Ok(bitcode::decode(&data).unwrap())
 }
 
-pub fn send_message<'a>(mut stream: impl Write, data: impl Message<'a>) -> std::io::Result<()> {
+pub fn send_message<'a>(mut stream: impl Write, data: impl IPCMessage<'a>) -> std::io::Result<()> {
     let data = bitcode::encode(&data);
     let size: u32 = data.len().try_into().unwrap();
     stream.write_all(&size.to_be_bytes())?;
