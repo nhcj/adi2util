@@ -3,7 +3,7 @@ use midir::{
 };
 use std::sync::{Arc, atomic::{AtomicU64, Ordering}};
 
-use adi2::{devices, midi::Message};
+use adi2::{devices, midi::{Message, MidiEncode}};
 
 pub struct MidiClient {
     device: devices::Device,
@@ -46,13 +46,22 @@ impl MidiClient {
             output_conn,
             last_message_ts: last_message_ts.clone(),
         };
-        client.send_status_request();
+        client.send_command(MidiCommands::RequestToDevice, Some(MidiRequests::Status)).unwrap();
         client
     }
 
-    pub fn send_status_request(&mut self) {
-        let data = &[0xF0, 0x00, 0x20, 0x0D, 0x71, 0x03, 0x09, 0xF7];
-        self.output_conn.send(data).unwrap();
+    pub fn send_command(&mut self, cmd: MidiCommands, arg: Option<impl MidiEncode>) -> Result<(), ()> {
+        let mut data = self.device.header().to_vec();
+        if matches!(cmd, MidiCommands::SendParameterToDevice) && arg.is_none() {
+            return Err(());
+        }
+        data.push(cmd as u8);
+        if let Some(arg) = arg {
+            data.extend_from_slice(&arg.to_midi_bytes().map_err(|_| ())?);
+        }
+        data.push(0xF7);
+        self.output_conn.send(&data).unwrap();
+        Ok(())
     }
 
     pub fn list_input_ports() {
@@ -82,4 +91,26 @@ fn first_port_with_name<T: MidiIO>(io: &T, name: &str) -> Option<T::Port> {
             .map(|n| n.starts_with(name))
             .unwrap_or(false)
     })
+}
+
+#[repr(u8)]
+#[non_exhaustive]
+pub enum MidiCommands {
+    SendParameterToDevice = 0x02,
+    RequestToDevice = 0x03,
+}
+
+#[non_exhaustive]
+pub enum MidiRequests {
+    Status
+}
+
+impl MidiEncode for MidiRequests {
+    type Error = ();
+
+    fn to_midi_bytes(&self) -> Result<Vec<u8>, Self::Error> {
+        match self {
+            MidiRequests::Status => Ok(vec![0x09]),
+        }
+    }
 }
