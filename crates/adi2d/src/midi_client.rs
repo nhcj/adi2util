@@ -46,21 +46,33 @@ impl MidiClient {
             output_conn,
             last_message_ts: last_message_ts.clone(),
         };
-        client.send_command(MidiCommands::RequestToDevice, Some(MidiRequests::Status)).unwrap();
+        client.send_status_command().unwrap();
         client
+    }
+
+    fn send_status_command(&mut self) -> Result<(), ()> {
+        self.send_command(MidiCommands::RequestToDevice, Some(MidiRequests::Status))
     }
 
     pub fn send_command(&mut self, cmd: MidiCommands, arg: Option<impl MidiEncode>) -> Result<(), ()> {
         let mut data = self.device.header().to_vec();
+        // Seems like we don't (consistently?) get additional status messages
+        // back from ADI device after sending commands like set channel parameter,
+        // so as a hacky solution (for now?), send a status command after any
+        // non-status command
+        let mut status_command = false;
         if matches!(cmd, MidiCommands::SendParameterToDevice) && arg.is_none() {
             return Err(());
         }
         data.push(cmd as u8);
         if let Some(arg) = arg {
-            data.extend_from_slice(&arg.to_midi_bytes().map_err(|_| ())?);
+            let arg = arg.to_midi_bytes().map_err(|_| ())?;
+            if arg.len() == 1 && arg[0] == 0x09 { status_command = true; }
+            data.extend_from_slice(&arg);
         }
         data.push(0xF7);
         self.output_conn.send(&data).unwrap();
+        if !status_command { self.send_status_command()?; }
         Ok(())
     }
 
