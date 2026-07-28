@@ -3,17 +3,17 @@ use midir::{
 };
 use std::sync::{Arc, atomic::{AtomicU64, Ordering}};
 
-use adi2::midi::Message;
-use adi2::devices;
+use adi2::{devices, midi::Message};
 
 pub struct MidiClient {
+    device: devices::Device,
     input_conn: MidiInputConnection<()>,
     output_conn: MidiOutputConnection,
     last_message_ts: Arc<AtomicU64>,
 }
 
 impl MidiClient {
-    pub fn from_port_name<F>(name: &str, on_message: F) -> Self 
+    pub fn from_port_name<F>(name: &str, device: devices::Device, on_message: F) -> Self 
         where F: Fn(Message, u64) + Send + 'static
     {
         let (input, output) = Self::create_midi_io();
@@ -31,7 +31,7 @@ impl MidiClient {
                 "adi2d intput port",
                 move |ts, data, _| {
                     last_message_ts_.store(ts, Ordering::Relaxed);
-                    let message = Message::from_midi_bytes(devices::Device::Adi2DacFs, data);
+                    let message = Message::from_midi_bytes(device, data);
                     if message.is_ok() {
                         on_message(message.unwrap(), ts);
                     }
@@ -41,6 +41,7 @@ impl MidiClient {
             .unwrap();
 
         let mut client = MidiClient {
+            device,
             input_conn,
             output_conn,
             last_message_ts: last_message_ts.clone(),
