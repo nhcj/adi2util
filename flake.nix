@@ -6,7 +6,7 @@
   };
 
   outputs = { nixpkgs, rust-overlay, ... }: let
-    platforms = [ "x86_64-linux" ];
+    platforms = [ "x86_64-linux" "aarch64-darwin" ];
     forAllPlatforms = f: nixpkgs.lib.genAttrs platforms (system: f (import nixpkgs {
       inherit system;
       overlays = [ rust-overlay.overlays.default ];
@@ -15,9 +15,10 @@
     devShells = forAllPlatforms (pkgs: {
       default = pkgs.mkShell {
         buildInputs = with pkgs; [
+          rust-bin.stable.latest.complete
+        ] ++ lib.optionals stdenv.hostPlatform.isLinux [
           alsa-lib
           pkg-config
-          rust-bin.stable.latest.complete
         ];
       };
     });
