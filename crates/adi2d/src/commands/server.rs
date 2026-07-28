@@ -46,6 +46,7 @@ fn server_handler(mut client: MidiClient, state: Arc<RwLock<State>>) -> impl FnM
             Request::Get(g) => {
                 match g {
                     GetRequest::State => Response::State(state.clone()),
+                    GetRequest::CurrentChannelParameter(_type) => Response::ChannelParameter(state.get_channel_parameter_value(None, _type)),
                     GetRequest::ChannelParameter(address, _type) => Response::ChannelParameter(state.get_channel_parameter_value(Some(address), _type)),
                     GetRequest::DeviceParameter(_type) => Response::DeviceParameter(state.get_device_parameter_value(_type)),
                 }

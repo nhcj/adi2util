@@ -18,6 +18,7 @@ pub enum Request {
 #[derive(Debug, Decode, Encode)]
 pub enum GetRequest {
     State,
+    CurrentChannelParameter(ChannelParameterType),
     ChannelParameter(ChannelAddress, ChannelParameterType),
     DeviceParameter(DeviceParameterType),
 }
