@@ -78,13 +78,13 @@ impl Message {
 
 #[derive(Debug)]
 pub struct StatusMessage {
-    active_output: Output,
+    pub active_output: Output,
 }
 
 #[derive(Debug)]
 pub struct Parameters {
-    channel: Vec<ChannelParameter>,
-    device: Vec<DeviceParameter>,
+    pub channel: Vec<ChannelParameter>,
+    pub device: Vec<DeviceParameter>,
 }
 
 impl TryFrom<&[u8]> for Parameters {
@@ -131,9 +131,9 @@ impl TryFrom<&[u8]> for Parameters {
 
 #[derive(Debug)]
 pub struct ChannelParameter {
-    address: ChannelAddress,
-    parameter: ChannelParameterType,
-    value: i16,
+    pub address: ChannelAddress,
+    pub parameter: ChannelParameterType,
+    pub value: i16,
 }
 
 impl ADIMidiParameter for ChannelParameter {
@@ -184,8 +184,8 @@ impl From<Output> for ChannelAddress {
 
 #[derive(Debug)]
 pub struct DeviceParameter {
-    parameter: DeviceParameterType,
-    value: u16,
+    pub parameter: DeviceParameterType,
+    pub value: u16,
 }
 
 impl ADIMidiParameter for DeviceParameter {
