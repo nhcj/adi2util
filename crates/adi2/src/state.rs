@@ -6,9 +6,9 @@ use bitcode::{Encode, Decode};
 type ChannelParameters = HashMap<ChannelParameterType, i16>;
 type DeviceParameters = HashMap<DeviceParameterType, u16>;
 
-#[derive(Debug, Decode, Default, Encode)]
+#[derive(Clone, Debug, Decode, Default, Encode)]
 pub struct State {
-    active_output: Option<midi::Output>,
+    pub active_output: Option<midi::Output>,
     channel_parameters: HashMap<ChannelAddress, ChannelParameters>,
     device_parameters: DeviceParameters,
 }
