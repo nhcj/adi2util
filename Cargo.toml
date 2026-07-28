@@ -7,3 +7,4 @@ members = [
 ]
 
 [workspace.dependencies]
+bitcode = "0.6"

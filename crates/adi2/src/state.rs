@@ -1,10 +1,12 @@
 use crate::midi::{self, ChannelAddress, ChannelParameter, ChannelParameterType, DeviceParameter, DeviceParameterType, Output};
 use std::collections::HashMap;
 
+use bitcode::{Encode, Decode};
+
 type ChannelParameters = HashMap<ChannelParameterType, i16>;
 type DeviceParameters = HashMap<DeviceParameterType, u16>;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Decode, Default, Encode)]
 pub struct State {
     active_output: Option<midi::Output>,
     channel_parameters: HashMap<ChannelAddress, ChannelParameters>,

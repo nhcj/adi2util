@@ -1,3 +1,5 @@
+use bitcode::{Encode, Decode};
+
 trait ADIMidiParameter: Sized {
     type Error;
 
@@ -9,7 +11,7 @@ trait ADIMidiParameter: Sized {
 }
 
 #[repr(u8)]
-#[derive(Copy, Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Copy, Clone, Debug, Decode, Encode, Eq, Hash, PartialEq)]
 pub enum Output {
     Line = 0,
     Phones = 1,
@@ -129,7 +131,7 @@ impl TryFrom<&[u8]> for Parameters {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Decode, Encode)]
 pub struct ChannelParameter {
     pub address: ChannelAddress,
     pub parameter: ChannelParameterType,
@@ -169,7 +171,7 @@ impl ADIMidiParameter for ChannelParameter {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Decode, Encode, Eq, Hash, PartialEq)]
 pub enum ChannelAddress {
     Output(Output),
     Unsupported(u8),
@@ -182,7 +184,7 @@ impl From<Output> for ChannelAddress {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Decode, Encode)]
 pub struct DeviceParameter {
     pub parameter: DeviceParameterType,
     pub value: u16,
@@ -216,7 +218,7 @@ impl ADIMidiParameter for DeviceParameter {
 }
 
 #[repr(u8)]
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Decode, Encode, Eq, Hash, PartialEq)]
 pub enum ChannelParameterType {
     Source = 1,
     RefLevel,
@@ -256,7 +258,7 @@ impl TryFrom<u8> for ChannelParameterType {
 }
 
 #[repr(u8)]
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Decode, Encode, Eq, Hash, PartialEq)]
 pub enum DeviceParameterType {
     MuteLineVs = 1,
     AutoStandby = 2,
