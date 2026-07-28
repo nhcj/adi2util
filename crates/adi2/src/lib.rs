@@ -2,6 +2,7 @@ pub mod devices {
     const ADI_2_DAC_FS: &[u8] = &[0xF0, 0x00, 0x20, 0x0D, 0x71];
 
     #[non_exhaustive]
+    #[derive(Copy, Clone)]
     pub enum Device {
         Adi2DacFs,
     }
