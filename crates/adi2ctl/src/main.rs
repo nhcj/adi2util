@@ -1,8 +1,39 @@
 mod client;
 
 use std::{env, fs, process};
-use adi2::{ipc::{Request, SetRequest}, midi::ChannelParameterType};
+
+use adi2::midi::ChannelParameterType;
+use clap::{Args, Parser, Subcommand};
+
 use crate::client::Client;
+
+// 1 unit = .1 dBr on device
+// TODO: make this a config option whenever I get around to adding a config file
+const VOLUME_UNIT_CHANGE: i16 = 25;
+
+// don't allow going above -30 dBr
+// TODO: also make this configurable/toggle-able
+const MAXIMUM_VOLUME: i16 = -300;
+
+#[derive(Parser)]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    Status,
+    IncrementVolume,
+    DecrementVolume,
+    SetVolume(SetVolumeArgs),
+}
+
+#[derive(Args)]
+struct SetVolumeArgs {
+    #[arg(allow_hyphen_values = true)]
+    volume: i16,
+}
 
 fn main() -> std::io::Result<()> {
     let xdg_runtime_dir = env::var("XDG_RUNTIME_DIR").expect("XDG_RUNTIME_DIR not set");
@@ -14,5 +45,33 @@ fn main() -> std::io::Result<()> {
     }
 
     let client = Client::new(socket_path);
+
+    let cli = Cli::parse();
+    match cli.command {
+        Commands::Status => {
+            let state = client.get_state()?;
+            println!("{:?}", state);
+        }
+        Commands::IncrementVolume | Commands::DecrementVolume => {
+            let current_volume = client.get_current_channel_parameter_value(ChannelParameterType::Volume)?;
+            let Some(current_volume) = current_volume else { 
+                eprintln!("Volume for currently active output couldn't be found");
+                process::exit(2);
+            };
+            let mut change = VOLUME_UNIT_CHANGE;
+            if matches!(cli.command, Commands::DecrementVolume) {
+                change *= -1;
+            }
+            client.set_current_channel_parameter_value(ChannelParameterType::Volume, current_volume + change)?;
+        }
+        Commands::SetVolume(args) => {
+            let volume = if args.volume <= MAXIMUM_VOLUME { args.volume } else {
+                eprintln!("Requested volume is higher than maximum {}; setting to maximum", MAXIMUM_VOLUME);
+                MAXIMUM_VOLUME
+            };
+            client.set_current_channel_parameter_value(ChannelParameterType::Volume, volume)?;
+        }
+    }
+
     Ok(())
 }

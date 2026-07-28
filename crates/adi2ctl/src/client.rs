@@ -1,6 +1,6 @@
 use std::{os::unix::net::UnixStream, path::PathBuf};
 
-use adi2::{ipc::{self, GetRequest, Request, Response}, state::State};
+use adi2::{ipc::{self, GetRequest, Request, Response, SetRequest}, midi::ChannelParameterType, state::State};
 
 pub struct Client {
     socket_path: PathBuf,
@@ -23,7 +23,22 @@ impl Client {
         self.send_request(Request::Get(GetRequest::State)).map(|r| {
             match r {
                 Response::State(s) => s,
-                _ => unimplemented!()
+                // TODO
+                _ => unreachable!()
+            }
+        })
+    }
+
+    pub fn set_current_channel_parameter_value(&self, _type: ChannelParameterType, value: i16) -> std::io::Result<Response> {
+        self.send_request(Request::Set(SetRequest::CurrentChannelParameter(_type, value)))
+    }
+
+    pub fn get_current_channel_parameter_value(&self, _type: ChannelParameterType) -> std::io::Result<Option<i16>> {
+        self.send_request(Request::Get(GetRequest::CurrentChannelParameter(_type))).map(|r| {
+            match r {
+                Response::ChannelParameter(p) => p,
+                // TODO
+                _ => unreachable!()
             }
         })
     }
