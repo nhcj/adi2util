@@ -1,10 +1,9 @@
 mod client;
-mod state;
 
 use adi2::midi::{ChannelParameterType, Message};
 use clap::{Parser, Subcommand};
 
-use crate::state::State;
+use adi2::state::State;
 
 #[derive(Parser)]
 #[command(version, about)]

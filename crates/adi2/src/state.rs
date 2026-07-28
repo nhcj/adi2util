@@ -1,4 +1,4 @@
-use adi2::midi::{self, ChannelAddress, ChannelParameter, ChannelParameterType, DeviceParameter, DeviceParameterType, Output};
+use crate::midi::{self, ChannelAddress, ChannelParameter, ChannelParameterType, DeviceParameter, DeviceParameterType, Output};
 use std::collections::HashMap;
 
 type ChannelParameters = HashMap<ChannelParameterType, i16>;
