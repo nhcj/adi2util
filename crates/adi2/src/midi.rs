@@ -1,6 +1,12 @@
 use bitcode::{Encode, Decode};
 
-trait ADIMidiParameter: Sized {
+pub trait MidiEncode {
+    type Error;
+
+    fn to_midi_bytes(&self) -> Result<Vec<u8>, Self::Error>;
+}
+
+pub trait ADIMidiParameter: Sized {
     type Error;
 
     // Address is not applicable to device parameters, so it is always None with
@@ -8,6 +14,14 @@ trait ADIMidiParameter: Sized {
     fn from_midi_bytes(address: Option<u8>, index: u8, value: ParameterValue) -> Result<Self, Self::Error>;
 
     fn to_midi_bytes(&self) -> Result<[u8; 3], Self::Error>;
+}
+
+impl<T: ADIMidiParameter> MidiEncode for T {
+    type Error = T::Error;
+
+    fn to_midi_bytes(&self) -> Result<Vec<u8>, Self::Error> {
+        self.to_midi_bytes().map(|s| s.to_vec())
+    }
 }
 
 #[repr(u8)]
@@ -38,7 +52,7 @@ impl TryFrom<u8> for Output {
 }
 
 #[derive(Debug)]
-enum ParameterValue {
+pub enum ParameterValue {
     ChannelValue(i16),
     DeviceValue(u16),
 }
