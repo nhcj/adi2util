@@ -1,9 +1,12 @@
 mod client;
+mod server;
 
 use adi2::midi::{ChannelParameterType, Message};
 use clap::{Parser, Subcommand};
 
 use adi2::state::State;
+
+use crate::server::Server;
 
 #[derive(Parser)]
 #[command(version, about)]
@@ -17,7 +20,7 @@ enum Commands {
     Run,
 }
 
-fn main() {
+fn main() -> std::io::Result<()> {
     let cli = Cli::parse();
 
     let state = std::sync::Arc::new(std::sync::RwLock::new(State::new()));
@@ -38,6 +41,8 @@ fn main() {
                     }
                 }
 });
+            let mut server = Server::new("/tmp/adi2d.sock", state.clone());
+            server.start()?;
 
             loop {
                 println!("{:?}", state.read().unwrap().get_channel_parameter_value(None, ChannelParameterType::Volume));
@@ -45,5 +50,4 @@ fn main() {
             }
         }
     }
-
 }
