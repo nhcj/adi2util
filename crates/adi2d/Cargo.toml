@@ -4,4 +4,6 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+adi2 = { path = "../adi2" }
+clap = { version = "4.6.4", features = ["derive"] }
 midir = "0.11"
