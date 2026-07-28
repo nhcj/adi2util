@@ -106,7 +106,7 @@ impl TryFrom<&[u8]> for Parameters {
                 let index = (first_byte & 0x07) << 3 | (second_byte & 0x70) >> 4;
                 let value = ((second_byte & 0xF) as u16) << 7 | third_byte;
 
-                let device_parameter = DeviceParameter::from_midi_bytes(None, index, ParameterValue::DeviceValue(value))?;
+                let Ok(device_parameter) = DeviceParameter::from_midi_bytes(None, index, ParameterValue::DeviceValue(value)) else { continue; };
                 device_parameters.push(device_parameter);
             } else {
                 let third_byte = data[i * 3 + 2] as i16;
@@ -118,7 +118,7 @@ impl TryFrom<&[u8]> for Parameters {
                     value => value,
                 };
 
-                let channel_parameter = ChannelParameter::from_midi_bytes(Some(address), index, ParameterValue::ChannelValue(value))?;
+                let Ok(channel_parameter) = ChannelParameter::from_midi_bytes(Some(address), index, ParameterValue::ChannelValue(value)) else { continue; };
                 channel_parameters.push(channel_parameter);
             }
         }
