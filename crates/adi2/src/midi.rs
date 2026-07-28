@@ -47,6 +47,35 @@ pub enum Message {
     Parameters(Parameters),
 }
 
+impl Message {
+    pub fn from_midi_bytes(device: crate::devices::Device, data: &[u8]) -> Result<Self, ()> {
+        // Bytes 1-4 = always F0 00 20 0D
+        // Byte 5 = Device ID (0x71 for ADI-2 FS)
+        // Final byte = 0xF7
+        if &data[0..5] != device.header() || *data.last().ok_or(())? != 0xF7 {
+            // failed structure check
+            return Err(());
+        }
+
+        // Byte 6 = Command
+        // Respond only to parameters (0x01) or status (0x07) to remote
+        if data[5] != 0x01 && data[5] != 0x07 {
+            // ignored command
+            return Err(());
+        }
+
+        match data[5] {
+            0x07 => Ok(Message::Status(StatusMessage {
+                active_output: Output::try_from(data[6])?,
+            })),
+            0x01 => Ok(Message::Parameters(Parameters::try_from(
+                &data[6..data.len() - 1],
+            )?)),
+            _ => unreachable!(),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct StatusMessage {
     active_output: Output,
@@ -56,6 +85,48 @@ pub struct StatusMessage {
 pub struct Parameters {
     channel: Vec<ChannelParameter>,
     device: Vec<DeviceParameter>,
+}
+
+impl TryFrom<&[u8]> for Parameters {
+    type Error = ();
+
+    fn try_from(data: &[u8]) -> Result<Self, Self::Error> {
+        let parameters_count = data.len() / 3;
+        let mut channel_parameters = Vec::new();
+        let mut device_parameters = Vec::new();
+
+        for i in 0..parameters_count {
+            let first_byte = data[i * 3];
+            let second_byte = data[i * 3 + 1];
+
+            let address = first_byte >> 3;
+            if address == 12 {
+                let third_byte = data[i * 3 + 2] as u16;
+
+                let index = (first_byte & 0x07) << 3 | (second_byte & 0x70) >> 4;
+                let value = ((second_byte & 0xF) as u16) << 7 | third_byte;
+
+                let device_parameter = DeviceParameter::from_midi_bytes(None, index, ParameterValue::DeviceValue(value))?;
+                device_parameters.push(device_parameter);
+            } else {
+                let third_byte = data[i * 3 + 2] as i16;
+
+                let index = (first_byte & 0x07) << 2 | (second_byte & 0x60) >> 5;
+                // channel parameter values are signed 12-bit
+                let value = match ((second_byte & 0x1F) as i16) << 7 | third_byte {
+                    value if value & 0x800 != 0 => value | !0xFFF,
+                    value => value,
+                };
+
+                let channel_parameter = ChannelParameter::from_midi_bytes(Some(address), index, ParameterValue::ChannelValue(value))?;
+                channel_parameters.push(channel_parameter);
+            }
+        }
+        Ok(Parameters {
+            channel: channel_parameters,
+            device: device_parameters,
+        })
+    }
 }
 
 #[derive(Debug)]
