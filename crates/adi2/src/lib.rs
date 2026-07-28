@@ -15,5 +15,6 @@ pub mod devices {
     }
 }
 
+pub mod ipc;
 pub mod midi;
 pub mod state;
