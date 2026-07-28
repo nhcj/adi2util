@@ -9,7 +9,7 @@ trait ADIMidiParameter: Sized {
 }
 
 #[repr(u8)]
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, Hash, PartialEq)]
 pub enum Output {
     Line = 0,
     Phones = 1,
@@ -169,8 +169,7 @@ impl ADIMidiParameter for ChannelParameter {
     }
 }
 
-
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum ChannelAddress {
     Output(Output),
     Unsupported(u8),
@@ -211,7 +210,7 @@ impl ADIMidiParameter for DeviceParameter {
 }
 
 #[repr(u8)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum ChannelParameterType {
     Source = 1,
     RefLevel,
@@ -251,7 +250,7 @@ impl TryFrom<u8> for ChannelParameterType {
 }
 
 #[repr(u8)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum DeviceParameterType {
     MuteLineVs = 1,
     AutoStandby = 2,
