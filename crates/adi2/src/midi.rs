@@ -176,6 +176,12 @@ pub enum ChannelAddress {
     Unexpected(u8),
 }
 
+impl From<Output> for ChannelAddress {
+    fn from(output: Output) -> Self {
+        Self::Output(output)
+    }
+}
+
 #[derive(Debug)]
 pub struct DeviceParameter {
     parameter: DeviceParameterType,
