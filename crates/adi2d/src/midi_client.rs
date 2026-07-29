@@ -66,7 +66,7 @@ impl MidiClient {
         }
         data.push(cmd as u8);
         if let Some(arg) = arg {
-            let arg = arg.to_midi_bytes().map_err(|_| ())?;
+            let arg = arg.encode().map_err(|_| ())?;
             if arg.len() == 1 && arg[0] == 0x09 { status_command = true; }
             data.extend_from_slice(&arg);
         }
@@ -120,7 +120,7 @@ pub enum MidiRequests {
 impl MidiEncode for MidiRequests {
     type Error = ();
 
-    fn to_midi_bytes(&self) -> Result<Vec<u8>, Self::Error> {
+    fn encode(&self) -> Result<Vec<u8>, Self::Error> {
         match self {
             MidiRequests::Status => Ok(vec![0x09]),
         }

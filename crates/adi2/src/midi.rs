@@ -3,7 +3,7 @@ use bitcode::{Encode, Decode};
 pub trait MidiEncode {
     type Error;
 
-    fn to_midi_bytes(&self) -> Result<Vec<u8>, Self::Error>;
+    fn encode(&self) -> Result<Vec<u8>, Self::Error>;
 }
 
 pub trait ADIMidiParameter: Sized {
@@ -19,7 +19,7 @@ pub trait ADIMidiParameter: Sized {
 impl<T: ADIMidiParameter> MidiEncode for T {
     type Error = T::Error;
 
-    fn to_midi_bytes(&self) -> Result<Vec<u8>, Self::Error> {
+    fn encode(&self) -> Result<Vec<u8>, Self::Error> {
         self.to_midi_bytes().map(|s| s.to_vec())
     }
 }
