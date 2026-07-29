@@ -62,7 +62,12 @@ fn main() -> std::io::Result<()> {
             if matches!(cli.command, Commands::DecrementVolume) {
                 change *= -1;
             }
-            client.set_current_channel_parameter_value(ChannelParameterType::Volume, current_volume + change)?;
+            let mut volume = current_volume + change;
+            if volume > MAXIMUM_VOLUME {
+                eprintln!("Requested volume is higher than maximum {}; setting to maximum", MAXIMUM_VOLUME);
+                volume = MAXIMUM_VOLUME;
+            }
+            client.set_current_channel_parameter_value(ChannelParameterType::Volume, volume)?;
         }
         Commands::SetVolume(args) => {
             let volume = if args.volume <= MAXIMUM_VOLUME { args.volume } else {
