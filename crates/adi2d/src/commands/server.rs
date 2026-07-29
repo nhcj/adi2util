@@ -34,6 +34,10 @@ fn midi_message_handler(state: Arc<RwLock<State>>) -> impl Fn(Message, u64) {
                 for param in params.channel.iter() {
                     state.set_channel_parameter(param);
                 }
+
+                for param in params.device.iter() {
+                    state.set_device_parameter(param);
+                }
             }
         }
     }
