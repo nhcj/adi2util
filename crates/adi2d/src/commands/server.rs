@@ -45,9 +45,9 @@ fn midi_message_handler(state: Arc<RwLock<State>>) -> impl Fn(Message, u64) {
 
 fn server_handler(mut client: MidiClient, state: Arc<RwLock<State>>) -> impl FnMut(Request) -> Response {
     move |req| {
-        let state = state.read().unwrap();
         match req {
             Request::Get(g) => {
+                let state = state.read().unwrap();
                 match g {
                     GetRequest::State => Response::State(state.clone()),
                     GetRequest::CurrentChannelParameter(_type) => Response::ChannelParameter(state.get_channel_parameter_value(None, _type)),
@@ -58,7 +58,8 @@ fn server_handler(mut client: MidiClient, state: Arc<RwLock<State>>) -> impl FnM
             Request::Set(s) => {
                 match s {
                     SetRequest::CurrentChannelParameter(_type, value) => {
-                        let Some(active_output) = state.active_output else { return Response::Err(()); };
+                        let active_output = { state.read().unwrap().active_output };
+                        let Some(active_output) = active_output else { return Response::Err(()); };
                         let param = ChannelParameter {
                             address: active_output.into(),
                             parameter: _type,
