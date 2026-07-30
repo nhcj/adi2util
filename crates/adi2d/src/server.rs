@@ -1,6 +1,6 @@
 use std::{os::unix::net::UnixListener, path::PathBuf};
 
-use adi2::ipc::{self, Request, Response};
+use adi2::ipc::{IPCStream, Request, Response};
 
 #[derive(Default)]
 pub struct Server {
@@ -19,11 +19,11 @@ impl Server {
     {
         let listener = UnixListener::bind(self.socket_path.as_path())?;
         for stream in listener.incoming() {
-            let stream = stream?;
-            let request = ipc::read_message::<Request>(stream.try_clone()?)?;
+            let mut ipc_stream = IPCStream::new(stream?);
+            let request = ipc_stream.read_message()?;
             println!("REQ: {:?}", request);
             let response = f(request);
-            ipc::send_message(stream, response)?;
+            ipc_stream.send_message(response)?;
         }
         Ok(())
     }

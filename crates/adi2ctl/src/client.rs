@@ -1,6 +1,6 @@
-use std::{os::unix::net::UnixStream, path::PathBuf};
+use std::{path::PathBuf};
 
-use adi2::{ipc::{self, GetRequest, Request, Response, SetRequest}, midi::ChannelParameterType, state::State};
+use adi2::{ipc::{GetRequest, IPCStream, Request, Response, SetRequest}, midi::ChannelParameterType, state::State};
 
 pub struct Client {
     socket_path: PathBuf,
@@ -14,9 +14,8 @@ impl Client {
     }
 
     fn send_request(&self, req: Request) -> std::io::Result<Response> {
-        let stream = UnixStream::connect(&self.socket_path)?;
-        ipc::send_message(stream.try_clone()?, req)?;
-        ipc::read_message(stream)
+        let mut stream = IPCStream::connect(&self.socket_path)?;
+        stream.make_request(req)
     }
 
     pub fn get_state(&self) -> std::io::Result<State> {

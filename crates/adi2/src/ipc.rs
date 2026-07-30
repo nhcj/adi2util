@@ -1,4 +1,4 @@
-use std::io::{Read, Write};
+use std::{io::{Read, Write}, os::unix::net::UnixStream, path::Path};
 
 use crate::{midi::{ChannelAddress, ChannelParameter, ChannelParameterType, DeviceParameter, DeviceParameterType}};
 use crate::state::State;
@@ -39,19 +39,55 @@ pub enum Response {
     Err(()),
 }
 
-pub fn read_message<M: for<'a> IPCMessage<'a>>(mut stream: impl Read) -> std::io::Result<M> {
-    let mut size_buffer = [0; 4];
-    stream.read_exact(&mut size_buffer)?;
-    let size = u32::from_be_bytes(size_buffer) as usize;
-    let mut data = vec![0; size];
-    stream.read_exact(&mut data)?;
-    Ok(bitcode::decode(&data).unwrap())
+pub const DEFAULT_MAX_MESSAGE_SIZE: u32 = 1<<20;
+
+pub struct IPCStream {
+    stream: UnixStream,
+    max_message_size: u32,
 }
 
-pub fn send_message<'a>(mut stream: impl Write, data: impl IPCMessage<'a>) -> std::io::Result<()> {
-    let data = bitcode::encode(&data);
-    let size: u32 = data.len().try_into().unwrap();
-    stream.write_all(&size.to_be_bytes())?;
-    stream.write_all(&data)?;
-    Ok(())
+impl IPCStream {
+    pub fn new(stream: UnixStream) -> IPCStream {
+        Self::new_with_max_size(stream, DEFAULT_MAX_MESSAGE_SIZE)
+    }
+
+    pub fn connect<P: AsRef<Path>>(socket_path: P) -> std::io::Result<IPCStream> {
+        let stream = UnixStream::connect(socket_path)?;
+        Ok(Self::new(stream))
+    }
+
+    pub fn new_with_max_size(stream: UnixStream, max_message_size: u32) -> IPCStream {
+        IPCStream {
+            stream,
+            max_message_size,
+        }
+    }
+
+    pub fn make_request(&mut self, r: Request) -> std::io::Result<Response> {
+        self.send_message(r)?;
+        self.read_message()
+    }
+
+    pub fn read_message<M: for<'a> IPCMessage<'a>>(&mut self) -> std::io::Result<M> {
+        let mut size_buffer = [0; 4];
+        self.stream.read_exact(&mut size_buffer)?;
+        let size = u32::from_be_bytes(size_buffer);
+        if size > self.max_message_size {
+            unimplemented!()
+        }
+        let mut data = vec![0; size as usize];
+        self.stream.read_exact(&mut data)?;
+        Ok(bitcode::decode(&data).unwrap())
+    }
+
+    pub fn send_message<'a>(&mut self, data: impl IPCMessage<'a>) -> std::io::Result<()> {
+        let data = bitcode::encode(&data);
+        let size: u32 = data.len().try_into().unwrap();
+        if size > self.max_message_size {
+            unimplemented!()
+        }
+        self.stream.write_all(&size.to_be_bytes())?;
+        self.stream.write_all(&data)?;
+        Ok(())
+    }
 }
