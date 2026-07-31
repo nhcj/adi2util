@@ -17,10 +17,12 @@ enum Commands {
     Server,
 }
 
-fn main() -> std::io::Result<()> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
     match cli.command.unwrap_or(Commands::Server) {
-        Commands::Server => commands::server::run("ADI-2", Device::Adi2DacFs),
+        Commands::Server => commands::server::run("ADI-2", Device::Adi2DacFs)?,
     }
+
+    Ok(())
 }

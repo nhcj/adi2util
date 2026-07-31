@@ -1,30 +1,23 @@
 use std::{os::unix::net::{UnixListener, UnixStream}, path::{Path, PathBuf}};
 
 use adi2::ipc::{IPCError, IPCStream, Request, Response};
+use thiserror::Error;
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum ServerError {
+    #[error("failed to remove stale socket at {socket_path:?}: {cause:?}")]
     RemovingStaleSocketFailed {
         socket_path: PathBuf,
         cause: std::io::Error,
     },
-    IPCError(IPCError),
-    OtherIOError(std::io::Error),
+    #[error("ipc error: {0}")]
+    IPCError(#[from] IPCError),
+    #[error("io error: {0}")]
+    OtherIOError(#[from] std::io::Error),
+    #[error("server is already running at {socket_path:?}")]
     ServerAlreadyRunning {
         socket_path: PathBuf,
     },
-}
-
-impl From<IPCError> for ServerError {
-    fn from(e: IPCError) -> Self {
-        ServerError::IPCError(e)
-    }
-}
-
-impl From<std::io::Error> for ServerError {
-    fn from(e: std::io::Error) -> Self {
-        ServerError::OtherIOError(e)
-    }
 }
 
 pub struct Server {

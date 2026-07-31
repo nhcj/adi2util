@@ -4,21 +4,26 @@ use crate::midi::{ChannelAddress, ChannelParameter, ChannelParameterType, Device
 use crate::state::State;
 
 use bitcode::{Decode, Encode};
+use thiserror::Error;
 
 pub trait IPCMessage<'a>: bitcode::Encode + bitcode::Decode<'a> {}
 impl<'a> IPCMessage<'a> for Request {}
 impl<'a> IPCMessage<'a> for Response {}
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum IPCError {
+    #[error("failed to decode message")]
     MessageDecodeFailed {
         data: Vec<u8>,
     },
+    #[error("message of size {size:?} bytes exceeds maximum allowed {max_size:?} bytes")]
     MessageTooLarge {
         size: usize,
         max_size: u32,
     },
+    #[error("failed to read or send message size: {0}")]
     ReadOrSendMessageSizeFailed(std::io::Error),
+    #[error("failed to read or send message with size {size:?}: {cause:?}")]
     ReadOrSendMessageFailed {
         size: u32,
         cause: std::io::Error,
