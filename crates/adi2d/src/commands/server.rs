@@ -2,24 +2,19 @@ use std::{env, fs, sync::{Arc, RwLock}};
 
 use adi2::{devices::Device, ipc::{GetRequest, Request, Response, SetRequest}, midi::{ChannelParameter, Message}, state::State};
 
-use crate::{midi_client::{MidiClient, MidiCommands}, server::Server};
+use crate::{midi_client::{MidiClient, MidiCommands}, server::{Server, ServerError}};
 
-pub fn run(port_name: &str, device: Device) -> std::io::Result<()> {
+pub fn run(port_name: &str, device: Device) -> Result<(), ServerError> {
     let xdg_runtime_dir = env::var("XDG_RUNTIME_DIR").expect("XDG_RUNTIME_DIR not set");
     let runtime_path = format!("{}/adi2d", xdg_runtime_dir);
     if !fs::exists(&runtime_path).expect("Failed to check if runtime path exists") {
         let _ = fs::create_dir(&runtime_path).expect("Failed to create runtime path");
     }
     let socket_path = format!("{}/socket", &runtime_path);
-    if fs::exists(&socket_path).expect("Failed to check if socket path exists") {
-        // TODO: return error whenever I actually add error handling
-        panic!("Existing socket found")
-    }
-
     let state = Arc::new(RwLock::new(State::new()));
     let midi_client = MidiClient::from_port_name(port_name, device, midi_message_handler(state.clone()));
 
-    let mut server = Server::new(socket_path);
+    let mut server = Server::bind(socket_path)?;
     server.start(server_handler(midi_client, state))
 }
 
