@@ -1,6 +1,6 @@
 use std::{io::{Read, Write}, os::unix::net::UnixStream, path::Path};
 
-use crate::{midi::{ChannelAddress, ChannelParameter, ChannelParameterType, DeviceParameter, DeviceParameterType}};
+use crate::midi::{ChannelAddress, ChannelParameter, ChannelParameterType, DeviceParameter, DeviceParameterType};
 use crate::state::State;
 
 use bitcode::{Decode, Encode};
@@ -8,6 +8,22 @@ use bitcode::{Decode, Encode};
 pub trait IPCMessage<'a>: bitcode::Encode + bitcode::Decode<'a> {}
 impl<'a> IPCMessage<'a> for Request {}
 impl<'a> IPCMessage<'a> for Response {}
+
+#[derive(Debug)]
+pub enum IPCError {
+    MessageDecodeFailed {
+        data: Vec<u8>,
+    },
+    MessageTooLarge {
+        size: usize,
+        max_size: u32,
+    },
+    ReadOrSendMessageSizeFailed(std::io::Error),
+    ReadOrSendMessageFailed {
+        size: u32,
+        cause: std::io::Error,
+    },
+}
 
 #[derive(Debug, Decode, Encode)]
 pub enum Request {
@@ -39,7 +55,7 @@ pub enum Response {
     Err(()),
 }
 
-pub const DEFAULT_MAX_MESSAGE_SIZE: u32 = 1<<20;
+pub const DEFAULT_MAX_MESSAGE_SIZE: u32 = 1 << 20;
 
 pub struct IPCStream {
     stream: UnixStream,
@@ -63,31 +79,57 @@ impl IPCStream {
         }
     }
 
-    pub fn make_request(&mut self, r: Request) -> std::io::Result<Response> {
+    pub fn make_request(&mut self, r: Request) -> Result<Response, IPCError> {
         self.send_message(r)?;
         self.read_message()
     }
 
-    pub fn read_message<M: for<'a> IPCMessage<'a>>(&mut self) -> std::io::Result<M> {
+    pub fn read_message<M: for<'a> IPCMessage<'a>>(&mut self) -> Result<M, IPCError> {
         let mut size_buffer = [0; 4];
-        self.stream.read_exact(&mut size_buffer)?;
+        self.stream
+            .read_exact(&mut size_buffer)
+            .map_err(|e| IPCError::ReadOrSendMessageSizeFailed(e))?;
         let size = u32::from_be_bytes(size_buffer);
         if size > self.max_message_size {
-            unimplemented!()
+            return Err(IPCError::MessageTooLarge {
+                size: size as usize,
+                max_size: self.max_message_size,
+            });
         }
         let mut data = vec![0; size as usize];
-        self.stream.read_exact(&mut data)?;
-        Ok(bitcode::decode(&data).unwrap())
+        self.stream
+            .read_exact(&mut data)
+            .map_err(|e| IPCError::ReadOrSendMessageFailed {
+                size: size,
+                cause: e,
+            })?;
+        Ok(bitcode::decode(&data).map_err(|_| IPCError::MessageDecodeFailed { data })?)
     }
 
-    pub fn send_message<'a>(&mut self, data: impl IPCMessage<'a>) -> std::io::Result<()> {
+    pub fn send_message<'a>(&mut self, data: impl IPCMessage<'a>) -> Result<(), IPCError> {
         let data = bitcode::encode(&data);
-        let size: u32 = data.len().try_into().unwrap();
+        let size: u32 = data
+            .len()
+            .try_into()
+            .map_err(|_| IPCError::MessageTooLarge {
+                size: data.len(),
+                max_size: self.max_message_size,
+            })?;
         if size > self.max_message_size {
-            unimplemented!()
+            return Err(IPCError::MessageTooLarge {
+                size: size as usize,
+                max_size: self.max_message_size,
+            });
         }
-        self.stream.write_all(&size.to_be_bytes())?;
-        self.stream.write_all(&data)?;
+        self.stream
+            .write_all(&size.to_be_bytes())
+            .map_err(|e| IPCError::ReadOrSendMessageSizeFailed(e))?;
+        self.stream
+            .write_all(&data)
+            .map_err(|e| IPCError::ReadOrSendMessageFailed {
+                size: size,
+                cause: e,
+            })?;
         Ok(())
     }
 }
