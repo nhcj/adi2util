@@ -1,20 +1,30 @@
-use std::{env, fs, sync::{Arc, RwLock}};
+use std::{env, fs, process, sync::{Arc, RwLock}};
 
 use adi2::{devices::Device, ipc::{GetRequest, Request, Response, SetRequest}, midi::{ChannelParameter, Message}, state::State};
+use log::{error, info};
 
 use crate::{midi_client::{MidiClient, MidiCommands}, server::{Server, ServerError}};
 
 pub fn run(port_name: &str, device: Device) -> Result<(), ServerError> {
-    let xdg_runtime_dir = env::var("XDG_RUNTIME_DIR").expect("XDG_RUNTIME_DIR not set");
+    let xdg_runtime_dir = env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| {
+        error!(target: "server", "XDG_RUNTIME_DIR must be set");
+        process::exit(1);
+    });
     let runtime_path = format!("{}/adi2d", xdg_runtime_dir);
-    if !fs::exists(&runtime_path).expect("Failed to check if runtime path exists") {
-        let _ = fs::create_dir(&runtime_path).expect("Failed to create runtime path");
+    info!(target: "server", "Setting runtime path to {}", runtime_path);
+    if !fs::exists(&runtime_path)? {
+        fs::create_dir(&runtime_path).unwrap_or_else(|e| {
+            error!(target: "server", "Error creating runtime path {}: {}", runtime_path, e);
+            process::exit(1);
+        });
     }
     let socket_path = format!("{}/socket", &runtime_path);
     let state = Arc::new(RwLock::new(State::new()));
     let midi_client = MidiClient::from_port_name(port_name, device, midi_message_handler(state.clone()));
+    info!(target: "midi_client", "Using port '{}'", midi_client.port_name());
 
-    let mut server = Server::bind(socket_path)?;
+    let mut server = Server::bind(&socket_path)?;
+    info!(target: "server", "Listening on socket at {}", socket_path);
     server.start(server_handler(midi_client, state))
 }
 
@@ -40,6 +50,7 @@ fn midi_message_handler(state: Arc<RwLock<State>>) -> impl Fn(Message, u64) {
 
 fn server_handler(mut client: MidiClient, state: Arc<RwLock<State>>) -> impl FnMut(Request) -> Response {
     move |req| {
+        info!("Received request: {:?}", req);
         match req {
             Request::Get(g) => {
                 let state = state.read().unwrap();

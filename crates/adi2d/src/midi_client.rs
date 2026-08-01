@@ -10,6 +10,7 @@ pub struct MidiClient {
     input_conn: MidiInputConnection<()>,
     output_conn: MidiOutputConnection,
     last_message_ts: Arc<AtomicU64>,
+    port_name: String,
 }
 
 impl MidiClient {
@@ -17,8 +18,8 @@ impl MidiClient {
         where F: Fn(Message, u64) + Send + 'static
     {
         let (input, output) = Self::create_midi_io();
-        let input_port = first_port_with_name(&input, name).expect("Failed to find matching input port");
-        let output_port = first_port_with_name(&output, name).expect("Failed to find matching output port");
+        let (input_port, input_port_name) = first_port_with_name(&input, name).expect("Failed to find matching input port");
+        let (output_port, _name) = first_port_with_name(&output, name).expect("Failed to find matching output port");
 
         let output_conn = output
             .connect(&output_port, "adi2d output port")
@@ -45,9 +46,14 @@ impl MidiClient {
             input_conn,
             output_conn,
             last_message_ts: last_message_ts.clone(),
+            port_name: input_port_name,
         };
         client.send_status_command().unwrap();
         client
+    }
+
+    pub fn port_name(&self) -> &str {
+        &self.port_name
     }
 
     fn send_status_command(&mut self) -> Result<(), ()> {
@@ -97,11 +103,12 @@ impl MidiClient {
     }
 }
 
-fn first_port_with_name<T: MidiIO>(io: &T, name: &str) -> Option<T::Port> {
-    io.ports().into_iter().find(|p| {
-        io.port_name(p)
-            .map(|n| n.starts_with(name))
-            .unwrap_or(false)
+fn first_port_with_name<T: MidiIO>(io: &T, name: &str) -> Option<(T::Port, String)> {
+    io.ports().into_iter().find_map(|p| {
+        io.port_name(&p)
+            .ok()
+            .filter(|n| n.starts_with(name))
+            .map(|n| (p, n))
     })
 }
 

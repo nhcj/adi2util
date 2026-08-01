@@ -42,7 +42,6 @@ impl Server {
         for stream in self.listener.incoming() {
             let mut ipc_stream = IPCStream::new(stream?);
             let request = ipc_stream.read_message()?;
-            println!("REQ: {:?}", request);
             let response = f(request);
             ipc_stream.send_message(response)?;
         }
