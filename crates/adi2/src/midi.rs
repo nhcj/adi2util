@@ -1,26 +1,87 @@
 use bitcode::{Encode, Decode};
+use thiserror::Error;
 
-pub trait MidiEncode {
-    type Error;
+use crate::devices::Device;
 
-    fn encode(&self) -> Result<Vec<u8>, Self::Error>;
+#[repr(u8)]
+pub enum CommandId {
+    SendParameterToDevice = 0x02,
+    RequestToDevice = 0x03,
 }
 
-pub trait ADIMidiParameter: Sized {
-    type Error;
-
-    // Address is not applicable to device parameters, so it is always None with
-    // them and always Some with channel parameters.
-    fn from_midi_bytes(address: Option<u8>, index: u8, value: ParameterValue) -> Result<Self, Self::Error>;
-
-    fn to_midi_bytes(&self) -> Result<[u8; 3], Self::Error>;
+#[derive(Debug, Error)]
+pub enum MidiError {
+    #[error("invalid message header: expected {expected:02X?}, received {received:02X?}")]
+    InvalidMessageHeader {
+        expected: [u8; 5],
+        received: Vec<u8>,
+    },
+    #[error("invalid message terminator: expected {expected:#04X}, received {received:#04X}")]
+    InvalidMessageTerminator {
+        expected: u8,
+        received: u8,
+    },
+    #[error("unsupported command: {0:#04X}")]
+    UnsupportedCommand(u8),
+    #[error("unknown channel address: {0}")]
+    UnknownChannelAddress(u8),
+    #[error("unknown channel parameter: {0}")]
+    UnknownChannelParameter(u8),
+    #[error("unknown device parameter: {0}")]
+    UnknownDeviceParameter(u8),
+    #[error("invalid output: {0}")]
+    InvalidOutput(u8),
+    #[error("channel parameter value {value} out of range [{min:?}, {max:?}]")]
+    ChannelValueOutOfRange {
+        value: i16,
+        min: i16,
+        max: i16,
+    },
+    #[error("device parameter value {value} out of range [0, {max:?}]")]
+    DeviceValueOutOfRange {
+        value: u16,
+        max: u16,
+    },
 }
 
-impl<T: ADIMidiParameter> MidiEncode for T {
-    type Error = T::Error;
+pub trait MidiCommand {
+    const COMMAND: CommandId;
+    fn encode_sysex(&self) -> Result<Vec<u8>, MidiError>;
+}
 
-    fn encode(&self) -> Result<Vec<u8>, Self::Error> {
-        self.to_midi_bytes().map(|s| s.to_vec())
+impl MidiCommand for ChannelParameter {
+    const COMMAND: CommandId = CommandId::SendParameterToDevice;
+    fn encode_sysex(&self) -> Result<Vec<u8>, MidiError> {
+        self.to_midi_bytes().map(|b| b.to_vec())
+    }
+}
+
+impl MidiCommand for DeviceParameter {
+    const COMMAND: CommandId = CommandId::SendParameterToDevice;
+    fn encode_sysex(&self) -> Result<Vec<u8>, MidiError> {
+        self.to_midi_bytes().map(|b| b.to_vec())
+    }
+}
+
+pub fn encode_sysex<C: MidiCommand>(device: Device, cmd: &C) -> Result<Vec<u8>, MidiError> {
+    let mut data = device.header().to_vec();
+    data.push(C::COMMAND as u8);
+    data.extend(cmd.encode_sysex()?);
+    data.push(0xF7);
+    Ok(data)
+}
+
+pub enum MidiRequests {
+    Status,
+}
+
+impl MidiCommand for MidiRequests {
+    const COMMAND: CommandId = CommandId::RequestToDevice;
+
+    fn encode_sysex(&self) -> Result<Vec<u8>, MidiError> {
+        match self {
+            MidiRequests::Status => Ok(vec![0x09]),
+        }
     }
 }
 
@@ -39,22 +100,16 @@ impl Output {
 }
 
 impl TryFrom<u8> for Output {
-    type Error = ();
+    type Error = MidiError;
 
-    fn try_from(output: u8) -> Result<Self, ()> {
-        match output & 0x03 {
+    fn try_from(output: u8) -> Result<Self, Self::Error> {
+        match output {
             0 => Ok(Output::Line),
             1 => Ok(Output::Phones),
             2 => Ok(Output::IEMs),
-            _ => Err(()),
+            output => Err(MidiError::InvalidOutput(output)),
         }
     }
-}
-
-#[derive(Debug)]
-pub enum ParameterValue {
-    ChannelValue(i16),
-    DeviceValue(u16),
 }
 
 #[derive(Debug)]
@@ -64,22 +119,29 @@ pub enum Message {
 }
 
 impl Message {
-    pub fn from_midi_bytes(device: crate::devices::Device, data: &[u8]) -> Result<Self, ()> {
+    pub fn from_midi_bytes(device: crate::devices::Device, data: &[u8]) -> Result<Self, MidiError> {
         // Bytes 1-4 = always F0 00 20 0D
         // Byte 5 = Device ID (0x71 for ADI-2 FS)
+        let expected_header = device.header();
+        let received_header = &data[..expected_header.len().min(data.len())];
+        if received_header != expected_header {
+            return Err(MidiError::InvalidMessageHeader {
+                expected: expected_header,
+                received: received_header.to_vec(),
+            });
+        }
+
         // Final byte = 0xF7
-        if &data[0..5] != device.header() || *data.last().ok_or(())? != 0xF7 {
-            // failed structure check
-            return Err(());
+        let terminator = data[data.len() - 1];
+        if terminator != 0xF7 {
+            return Err(MidiError::InvalidMessageTerminator {
+                expected: 0xF7,
+                received: terminator,
+            });
         }
 
         // Byte 6 = Command
         // Respond only to parameters (0x01) or status (0x07) to remote
-        if data[5] != 0x01 && data[5] != 0x07 {
-            // ignored command
-            return Err(());
-        }
-
         match data[5] {
             0x07 => Ok(Message::Status(StatusMessage {
                 active_output: Output::try_from(data[6])?,
@@ -87,7 +149,7 @@ impl Message {
             0x01 => Ok(Message::Parameters(Parameters::try_from(
                 &data[6..data.len() - 1],
             )?)),
-            _ => unreachable!(),
+            command => Err(MidiError::UnsupportedCommand(command)),
         }
     }
 }
@@ -104,7 +166,7 @@ pub struct Parameters {
 }
 
 impl TryFrom<&[u8]> for Parameters {
-    type Error = ();
+    type Error = MidiError;
 
     fn try_from(data: &[u8]) -> Result<Self, Self::Error> {
         let parameters_count = data.len() / 3;
@@ -122,7 +184,7 @@ impl TryFrom<&[u8]> for Parameters {
                 let index = (first_byte & 0x07) << 3 | (second_byte & 0x70) >> 4;
                 let value = ((second_byte & 0xF) as u16) << 7 | third_byte;
 
-                let Ok(device_parameter) = DeviceParameter::from_midi_bytes(None, index, ParameterValue::DeviceValue(value)) else { continue; };
+                let device_parameter = DeviceParameter::from_raw_values(index, value)?;
                 device_parameters.push(device_parameter);
             } else {
                 let third_byte = data[i * 3 + 2] as i16;
@@ -134,7 +196,7 @@ impl TryFrom<&[u8]> for Parameters {
                     value => value,
                 };
 
-                let Ok(channel_parameter) = ChannelParameter::from_midi_bytes(Some(address), index, ParameterValue::ChannelValue(value)) else { continue; };
+                let channel_parameter = ChannelParameter::from_raw_values(address, index, value)?;
                 channel_parameters.push(channel_parameter);
             }
         }
@@ -152,18 +214,16 @@ pub struct ChannelParameter {
     pub value: i16,
 }
 
-impl ADIMidiParameter for ChannelParameter {
-    type Error = ();
-
-    fn from_midi_bytes(address: Option<u8>, index: u8, value: ParameterValue) -> Result<Self, ()> {
-        let address = match address.expect("address is always provided for channel parameters") {
-            a @ (3|6|9) => ChannelAddress::Output(Output::try_from((a / 3) - 1)?),
+impl ChannelParameter {
+    fn from_raw_values(address: u8, index: u8, value: i16) -> Result<Self, MidiError> {
+        let address = match address {
+            3 => Output::Line.into(),
+            6 => Output::Phones.into(),
+            9 => Output::IEMs.into(),
             a @ 1..=14 => ChannelAddress::Unsupported(a),
-            a => ChannelAddress::Unexpected(a),
+            a => return Err(MidiError::UnknownChannelAddress(a)),
         };
         let parameter = ChannelParameterType::try_from(index)?;
-        let ParameterValue::ChannelValue(value) = value else { unreachable!() };
-
         Ok(ChannelParameter {
             address,
             parameter,
@@ -171,12 +231,16 @@ impl ADIMidiParameter for ChannelParameter {
         })
     }
 
-    fn to_midi_bytes(&self) -> Result<[u8; 3], ()> {
-        let address = if let ChannelAddress::Output(output) = self.address {
-            output.channel_address()
-        } else {
-            return Err(());
-        };
+    fn to_midi_bytes(&self) -> Result<[u8; 3], MidiError> {
+        // channel parameter values are signed 12-bit
+        if self.value < -0x800 || self.value > 0x7FF {
+            return Err(MidiError::ChannelValueOutOfRange {
+                value: self.value,
+                min: -0x800,
+                max: 0x7FF,
+            });
+        }
+        let address: u8 = self.address.into();
         let index = self.parameter as u8;
         let first_byte = (address << 3) | (index & 0x1C) >> 2;
         let second_byte = (index & 0x03) << 5 | ((self.value & 0x800) >> 7) as u8 | ((self.value >> 7) & 0xF) as u8;
@@ -189,7 +253,15 @@ impl ADIMidiParameter for ChannelParameter {
 pub enum ChannelAddress {
     Output(Output),
     Unsupported(u8),
-    Unexpected(u8),
+}
+
+impl From<ChannelAddress> for u8 {
+    fn from(address: ChannelAddress) -> Self {
+        match address {
+            ChannelAddress::Output(o) => o.channel_address(),
+            ChannelAddress::Unsupported(a) => a,
+        }
+    }
 }
 
 impl From<Output> for ChannelAddress {
@@ -204,23 +276,22 @@ pub struct DeviceParameter {
     pub value: u16,
 }
 
-impl ADIMidiParameter for DeviceParameter {
-    type Error = ();
-
-    fn from_midi_bytes(_: Option<u8>, index: u8, value: ParameterValue) -> Result<Self, Self::Error> {
+impl DeviceParameter {
+    fn from_raw_values(index: u8, value: u16) -> Result<Self, MidiError> {
         let parameter = DeviceParameterType::try_from(index)?;
-        let ParameterValue::DeviceValue(value) = value else { unreachable!() };
-
         Ok(DeviceParameter {
             parameter,
             value,
         })
     }
 
-    fn to_midi_bytes(&self) -> Result<[u8; 3], Self::Error> {
+    fn to_midi_bytes(&self) -> Result<[u8; 3], MidiError> {
         // device parameter values are unsigned 11-bit
         if self.value > 0x7FF {
-            return Err(());
+            return Err(MidiError::DeviceValueOutOfRange {
+                value: self.value,
+                max: 0x7FF,
+            });
         }
         let index = self.parameter as u8;
         // device parameters always use address 12
@@ -260,14 +331,35 @@ pub enum ChannelParameterType {
 }
 
 impl TryFrom<u8> for ChannelParameterType {
-    type Error = ();
+    type Error = MidiError;
+
     fn try_from(param: u8) -> Result<Self, Self::Error> {
-        if param >= ChannelParameterType::Source as u8
-            && param <= ChannelParameterType::LoudnessLowVolRef as u8
-        {
-            return Ok(unsafe { std::mem::transmute(param) });
+        match param {
+            1 => Ok(ChannelParameterType::Source),
+            2 => Ok(ChannelParameterType::RefLevel),
+            3 => Ok(ChannelParameterType::AutoRefLevel),
+            4 => Ok(ChannelParameterType::Mono),
+            5 => Ok(ChannelParameterType::Width),
+            6 => Ok(ChannelParameterType::MSProc),
+            7 => Ok(ChannelParameterType::Polarity),
+            8 => Ok(ChannelParameterType::Crossfeed),
+            9 => Ok(ChannelParameterType::DAFilter),
+            10 => Ok(ChannelParameterType::DeEmphasis),
+            11 => Ok(ChannelParameterType::DualEQ),
+            12 => Ok(ChannelParameterType::Volume),
+            13 => Ok(ChannelParameterType::LockVolume),
+            14 => Ok(ChannelParameterType::Balance),
+            15 => Ok(ChannelParameterType::Mute),
+            16 => Ok(ChannelParameterType::Dim),
+            17 => Ok(ChannelParameterType::LoopbackToUSB),
+            18 => Ok(ChannelParameterType::DigDCProtection),
+            19 => Ok(ChannelParameterType::RearTRSSource),
+            20 => Ok(ChannelParameterType::LoudnessEnable),
+            21 => Ok(ChannelParameterType::LoudnessBassGain),
+            22 => Ok(ChannelParameterType::LoudnessTrebleGain),
+            23 => Ok(ChannelParameterType::LoudnessLowVolRef),
+            param => Err(MidiError::UnknownChannelParameter(param)),
         }
-        Err(())
     }
 }
 
@@ -309,7 +401,8 @@ pub enum DeviceParameterType {
 }
 
 impl TryFrom<u8> for DeviceParameterType {
-    type Error = ();
+    type Error = MidiError;
+
     fn try_from(param: u8) -> Result<Self, Self::Error> {
         match param {
             1 => Ok(DeviceParameterType::MuteLineVs),
@@ -344,7 +437,7 @@ impl TryFrom<u8> for DeviceParameterType {
             41 => Ok(DeviceParameterType::SRCMode),
             42 => Ok(DeviceParameterType::SRCGainDig),
             43 => Ok(DeviceParameterType::OpticalOutSource),
-            _ => Err(()),
+            param => Err(MidiError::UnknownDeviceParameter(param)),
         }
     }
 }

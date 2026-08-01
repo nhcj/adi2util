@@ -1,7 +1,10 @@
 use std::{os::unix::net::{UnixListener, UnixStream}, path::{Path, PathBuf}};
 
 use adi2::ipc::{IPCError, IPCStream, Request, Response};
+use log::{error, info};
 use thiserror::Error;
+
+use crate::midi_client::MidiClientError;
 
 #[derive(Debug, Error)]
 pub enum ServerError {
@@ -18,6 +21,14 @@ pub enum ServerError {
     ServerAlreadyRunning {
         socket_path: PathBuf,
     },
+}
+
+#[derive(Debug, Error)]
+pub enum HandlerError {
+    #[error("state does not have active output")]
+    ActiveOutputUnset,
+    #[error("error with midi client: {0}")]
+    MidiClientError(#[from] MidiClientError),
 }
 
 pub struct Server {
@@ -37,12 +48,16 @@ impl Server {
     }
 
     pub fn start<F>(&mut self, mut f: F) -> Result<(), ServerError>
-        where F: FnMut(Request) -> Response
+        where F: FnMut(Request) -> Result<Response, HandlerError>
     {
         for stream in self.listener.incoming() {
             let mut ipc_stream = IPCStream::new(stream?);
             let request = ipc_stream.read_message()?;
-            let response = f(request);
+            info!("Received request: {:?}", request);
+            let response = f(request).unwrap_or_else(|e| {
+                error!("Error handling request: {:?}", e);
+                Response::Err(e.to_string())
+            });
             ipc_stream.send_message(response)?;
         }
         Ok(())
@@ -57,7 +72,9 @@ fn remove_stale_socket(socket_path: &Path) -> Result<(), ServerError> {
     match UnixStream::connect(socket_path) {
         Ok(_) => Err(ServerError::ServerAlreadyRunning { socket_path: socket_path.into() }),
         Err(e) if e.kind() == std::io::ErrorKind::ConnectionRefused => {
+            info!("Removing stale socket at {}", socket_path.display());
             Ok(std::fs::remove_file(socket_path).map_err(|e| {
+                error!("Failed to remove stale socket at {}: {:?}", socket_path.display(), e);
                 ServerError::RemovingStaleSocketFailed {
                     socket_path: socket_path.into(),
                     cause: e,

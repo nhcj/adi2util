@@ -28,6 +28,8 @@ pub enum IPCError {
         size: u32,
         cause: std::io::Error,
     },
+    #[error("an io error has occurred: {0}")]
+    OtherIoError(#[from] std::io::Error),
 }
 
 #[derive(Debug, Decode, Encode)]
@@ -57,7 +59,7 @@ pub enum Response {
     State(State),
     ChannelParameter(Option<i16>),
     DeviceParameter(Option<u16>),
-    Err(()),
+    Err(String),
 }
 
 pub const DEFAULT_MAX_MESSAGE_SIZE: u32 = 1 << 20;
@@ -72,7 +74,7 @@ impl IPCStream {
         Self::new_with_max_size(stream, DEFAULT_MAX_MESSAGE_SIZE)
     }
 
-    pub fn connect<P: AsRef<Path>>(socket_path: P) -> std::io::Result<IPCStream> {
+    pub fn connect<P: AsRef<Path>>(socket_path: P) -> Result<IPCStream, IPCError> {
         let stream = UnixStream::connect(socket_path)?;
         Ok(Self::new(stream))
     }

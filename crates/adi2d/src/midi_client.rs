@@ -1,9 +1,20 @@
 use midir::{
     MidiIO, MidiInput, MidiInputConnection, MidiOutput, MidiOutputConnection
 };
+use thiserror::Error;
 use std::sync::{Arc, atomic::{AtomicU64, Ordering}};
 
-use adi2::{devices, midi::{Message, MidiEncode}};
+use adi2::{devices, midi::{self, Message, MidiCommand, MidiRequests, encode_sysex}};
+use log::error;
+
+
+#[derive(Debug, Error)]
+pub enum MidiClientError {
+    #[error("encoding message failed: {0}")]
+    MidiEncodingError(#[from] midi::MidiError),
+    #[error("failed to send message: {0}")]
+    SendError(#[from] midir::SendError),
+}
 
 pub struct MidiClient {
     device: devices::Device,
@@ -56,30 +67,12 @@ impl MidiClient {
         &self.port_name
     }
 
-    fn send_status_command(&mut self) -> Result<(), ()> {
-        self.send_command(MidiCommands::RequestToDevice, Some(MidiRequests::Status))
+    fn send_status_command(&mut self) -> Result<(), MidiClientError> {
+        self.send_command(&MidiRequests::Status)
     }
 
-    pub fn send_command(&mut self, cmd: MidiCommands, arg: Option<impl MidiEncode>) -> Result<(), ()> {
-        let mut data = self.device.header().to_vec();
-        // Seems like we don't (consistently?) get additional status messages
-        // back from ADI device after sending commands like set channel parameter,
-        // so as a hacky solution (for now?), send a status command after any
-        // non-status command
-        let mut status_command = false;
-        if matches!(cmd, MidiCommands::SendParameterToDevice) && arg.is_none() {
-            return Err(());
-        }
-        data.push(cmd as u8);
-        if let Some(arg) = arg {
-            let arg = arg.encode().map_err(|_| ())?;
-            if arg.len() == 1 && arg[0] == 0x09 { status_command = true; }
-            data.extend_from_slice(&arg);
-        }
-        data.push(0xF7);
-        self.output_conn.send(&data).unwrap();
-        if !status_command { self.send_status_command()?; }
-        Ok(())
+    pub fn send_command<T: MidiCommand>(&mut self, cmd: &T) -> Result<(), MidiClientError> {
+        Ok(self.output_conn.send(&encode_sysex(self.device, cmd)?)?)
     }
 
     pub fn list_input_ports() {
@@ -110,26 +103,4 @@ fn first_port_with_name<T: MidiIO>(io: &T, name: &str) -> Option<(T::Port, Strin
             .filter(|n| n.starts_with(name))
             .map(|n| (p, n))
     })
-}
-
-#[repr(u8)]
-#[non_exhaustive]
-pub enum MidiCommands {
-    SendParameterToDevice = 0x02,
-    RequestToDevice = 0x03,
-}
-
-#[non_exhaustive]
-pub enum MidiRequests {
-    Status
-}
-
-impl MidiEncode for MidiRequests {
-    type Error = ();
-
-    fn encode(&self) -> Result<Vec<u8>, Self::Error> {
-        match self {
-            MidiRequests::Status => Ok(vec![0x09]),
-        }
-    }
 }

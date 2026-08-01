@@ -3,7 +3,7 @@ use std::{env, fs, process, sync::{Arc, RwLock}};
 use adi2::{devices::Device, ipc::{GetRequest, Request, Response, SetRequest}, midi::{ChannelParameter, Message}, state::State};
 use log::{error, info};
 
-use crate::{midi_client::{MidiClient, MidiCommands}, server::{Server, ServerError}};
+use crate::{midi_client::{MidiClient, MidiClientError}, server::{HandlerError, Server, ServerError}};
 
 pub fn run(port_name: &str, device: Device) -> Result<(), ServerError> {
     let xdg_runtime_dir = env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| {
@@ -48,35 +48,33 @@ fn midi_message_handler(state: Arc<RwLock<State>>) -> impl Fn(Message, u64) {
     }
 }
 
-fn server_handler(mut client: MidiClient, state: Arc<RwLock<State>>) -> impl FnMut(Request) -> Response {
+fn server_handler(mut client: MidiClient, state: Arc<RwLock<State>>) -> impl FnMut(Request) -> Result<Response, HandlerError> {
     move |req| {
-        info!("Received request: {:?}", req);
         match req {
             Request::Get(g) => {
                 let state = state.read().unwrap();
                 match g {
-                    GetRequest::State => Response::State(state.clone()),
-                    GetRequest::CurrentChannelParameter(_type) => Response::ChannelParameter(state.get_channel_parameter_value(None, _type)),
-                    GetRequest::ChannelParameter(address, _type) => Response::ChannelParameter(state.get_channel_parameter_value(Some(address), _type)),
-                    GetRequest::DeviceParameter(_type) => Response::DeviceParameter(state.get_device_parameter_value(_type)),
+                    GetRequest::State => Ok(Response::State(state.clone())),
+                    GetRequest::CurrentChannelParameter(_type) => Ok(Response::ChannelParameter(state.get_channel_parameter_value(None, _type))),
+                    GetRequest::ChannelParameter(address, _type) => Ok(Response::ChannelParameter(state.get_channel_parameter_value(Some(address), _type))),
+                    GetRequest::DeviceParameter(_type) => Ok(Response::DeviceParameter(state.get_device_parameter_value(_type))),
                 }
             }
             Request::Set(s) => {
                 match s {
                     SetRequest::CurrentChannelParameter(_type, value) => {
-                        let active_output = { state.read().unwrap().active_output };
-                        let Some(active_output) = active_output else { return Response::Err(()); };
+                        let active_output = state.read().unwrap().active_output.ok_or(HandlerError::ActiveOutputUnset)?;
                         let param = ChannelParameter {
                             address: active_output.into(),
                             parameter: _type,
                             value,
                         };
-                        client.send_command(MidiCommands::SendParameterToDevice, Some(param)).unwrap();
+                        client.send_command(&param)?;
                     }
-                    SetRequest::ChannelParameter(param) => { client.send_command(MidiCommands::SendParameterToDevice, Some(param)).unwrap(); }
-                    SetRequest::DeviceParameter(param) => { client.send_command(MidiCommands::SendParameterToDevice, Some(param)).unwrap(); }
+                    SetRequest::ChannelParameter(param) => { client.send_command(&param)?; }
+                    SetRequest::DeviceParameter(param) => { client.send_command(&param)?; }
                 }
-                Response::Ok
+                Ok(Response::Ok)
             }
         }
     }
