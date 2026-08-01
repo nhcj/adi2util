@@ -35,7 +35,7 @@ struct SetVolumeArgs {
     volume: i16,
 }
 
-fn main() -> std::io::Result<()> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let xdg_runtime_dir = env::var("XDG_RUNTIME_DIR").expect("XDG_RUNTIME_DIR not set");
     let runtime_path = format!("{}/adi2d", xdg_runtime_dir);
     let socket_path = format!("{}/socket", &runtime_path);

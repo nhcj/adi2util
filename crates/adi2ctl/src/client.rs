@@ -1,6 +1,6 @@
 use std::{path::PathBuf};
 
-use adi2::{ipc::{GetRequest, IPCStream, Request, Response, SetRequest}, midi::ChannelParameterType, state::State};
+use adi2::{ipc::{GetRequest, IPCError, IPCStream, Request, Response, SetRequest}, midi::ChannelParameterType, state::State};
 
 pub struct Client {
     socket_path: PathBuf,
@@ -13,12 +13,12 @@ impl Client {
         }
     }
 
-    fn send_request(&self, req: Request) -> std::io::Result<Response> {
+    fn send_request(&self, req: Request) -> Result<Response, IPCError> {
         let mut stream = IPCStream::connect(&self.socket_path)?;
         stream.make_request(req)
     }
 
-    pub fn get_state(&self) -> std::io::Result<State> {
+    pub fn get_state(&self) -> Result<State, IPCError> {
         self.send_request(Request::Get(GetRequest::State)).map(|r| {
             match r {
                 Response::State(s) => s,
@@ -28,11 +28,11 @@ impl Client {
         })
     }
 
-    pub fn set_current_channel_parameter_value(&self, _type: ChannelParameterType, value: i16) -> std::io::Result<Response> {
+    pub fn set_current_channel_parameter_value(&self, _type: ChannelParameterType, value: i16) -> Result<Response, IPCError> {
         self.send_request(Request::Set(SetRequest::CurrentChannelParameter(_type, value)))
     }
 
-    pub fn get_current_channel_parameter_value(&self, _type: ChannelParameterType) -> std::io::Result<Option<i16>> {
+    pub fn get_current_channel_parameter_value(&self, _type: ChannelParameterType) -> Result<Option<i16>, IPCError> {
         self.send_request(Request::Get(GetRequest::CurrentChannelParameter(_type))).map(|r| {
             match r {
                 Response::ChannelParameter(p) => p,
