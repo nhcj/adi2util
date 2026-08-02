@@ -116,6 +116,8 @@ impl TryFrom<u8> for Output {
 pub enum Message {
     Status(StatusMessage),
     Parameters(Parameters),
+    // temp variant to let me ignore unimplmented commands rather than error
+    Ignore
 }
 
 impl Message {
@@ -149,6 +151,7 @@ impl Message {
             0x01 => Ok(Message::Parameters(Parameters::try_from(
                 &data[6..data.len() - 1],
             )?)),
+            0x05 => Ok(Message::Ignore),
             command => Err(MidiError::UnsupportedCommand(command)),
         }
     }

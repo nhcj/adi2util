@@ -44,6 +44,7 @@ fn midi_message_handler(state: Arc<RwLock<State>>) -> impl Fn(Message, u64) {
                     state.set_device_parameter(param);
                 }
             }
+            Message::Ignore => {}
         }
     }
 }
