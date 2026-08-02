@@ -163,6 +163,7 @@ pub struct StatusMessage {
 pub struct Parameters {
     pub channel: Vec<ChannelParameter>,
     pub device: Vec<DeviceParameter>,
+    pub decode_errors: Vec<MidiError>,
 }
 
 impl TryFrom<&[u8]> for Parameters {
@@ -172,6 +173,7 @@ impl TryFrom<&[u8]> for Parameters {
         let parameters_count = data.len() / 3;
         let mut channel_parameters = Vec::new();
         let mut device_parameters = Vec::new();
+        let mut decode_errors = Vec::new();
 
         for i in 0..parameters_count {
             let first_byte = data[i * 3];
@@ -184,8 +186,10 @@ impl TryFrom<&[u8]> for Parameters {
                 let index = (first_byte & 0x07) << 3 | (second_byte & 0x70) >> 4;
                 let value = ((second_byte & 0xF) as u16) << 7 | third_byte;
 
-                let device_parameter = DeviceParameter::from_raw_values(index, value)?;
-                device_parameters.push(device_parameter);
+                match DeviceParameter::from_raw_values(index, value) {
+                    Ok(param) => { device_parameters.push(param); }
+                    Err(e) => { decode_errors.push(e); }
+                }
             } else {
                 let third_byte = data[i * 3 + 2] as i16;
 
@@ -196,13 +200,16 @@ impl TryFrom<&[u8]> for Parameters {
                     value => value,
                 };
 
-                let channel_parameter = ChannelParameter::from_raw_values(address, index, value)?;
-                channel_parameters.push(channel_parameter);
+                match ChannelParameter::from_raw_values(address, index, value) {
+                    Ok(param) => { channel_parameters.push(param); }
+                    Err(e) => { decode_errors.push(e); }
+                }
             }
         }
         Ok(Parameters {
             channel: channel_parameters,
             device: device_parameters,
+            decode_errors,
         })
     }
 }
