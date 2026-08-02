@@ -2,9 +2,9 @@ use midir::{
     MidiIO, MidiInput, MidiInputConnection, MidiOutput, MidiOutputConnection
 };
 use thiserror::Error;
-use std::sync::{Arc, atomic::{AtomicU64, Ordering}};
+use std::{sync::{Arc, Mutex, atomic::{AtomicU64, Ordering}}, time::Duration};
 
-use adi2::{devices, midi::{self, Message, MidiCommand, MidiRequests, encode_sysex}};
+use adi2::{devices::{self, Device}, midi::{self, Message, MidiCommand, MidiRequests, encode_sysex}};
 use log::error;
 
 
@@ -19,7 +19,7 @@ pub enum MidiClientError {
 pub struct MidiClient {
     device: devices::Device,
     input_conn: MidiInputConnection<()>,
-    output_conn: MidiOutputConnection,
+    output_conn: Arc<Mutex<MidiOutputConnection>>,
     last_message_ts: Arc<AtomicU64>,
     port_name: String,
 }
@@ -35,6 +35,7 @@ impl MidiClient {
         let output_conn = output
             .connect(&output_port, "adi2d output port")
             .expect("Failed to connect to ADI-2 output port");
+        let output_conn = Arc::new(Mutex::new(output_conn));
         let last_message_ts = Arc::new(AtomicU64::new(0));
         let last_message_ts_ = last_message_ts.clone();
         let input_conn = input
@@ -52,27 +53,43 @@ impl MidiClient {
             )
             .unwrap();
 
-        let mut client = MidiClient {
+        let client = MidiClient {
             device,
             input_conn,
             output_conn,
             last_message_ts: last_message_ts.clone(),
             port_name: input_port_name,
         };
-        client.send_status_command().unwrap();
+        client.spawn_status_poller(Duration::from_secs(1));
         client
+    }
+
+    fn spawn_status_poller(&self, poll_interval: Duration) {
+        let device = self.device;
+        let output_conn = self.output_conn.clone();
+        std::thread::spawn(move || loop {
+            if let Err(e) = Self::_send_command(device, &output_conn, &MidiRequests::Status) {
+                error!("error polling status: {:?}", e);
+            }
+            std::thread::sleep(poll_interval);
+        });
     }
 
     pub fn port_name(&self) -> &str {
         &self.port_name
     }
 
-    fn send_status_command(&mut self) -> Result<(), MidiClientError> {
-        self.send_command(&MidiRequests::Status)
+    fn _send_command<T: MidiCommand>(device: Device, output_conn: &Mutex<MidiOutputConnection>, cmd: &T) -> Result<(), MidiClientError> {
+        let data = encode_sysex(device, cmd)?;
+        output_conn
+            .lock()
+            .unwrap()
+            .send(&data)?;
+        Ok(())
     }
 
     pub fn send_command<T: MidiCommand>(&mut self, cmd: &T) -> Result<(), MidiClientError> {
-        Ok(self.output_conn.send(&encode_sysex(self.device, cmd)?)?)
+        Self::_send_command(self.device, &self.output_conn, cmd)
     }
 
     pub fn list_input_ports() {
