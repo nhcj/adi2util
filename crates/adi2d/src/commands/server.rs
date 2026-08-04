@@ -25,7 +25,8 @@ pub fn run(port_name: &str, device: Device) -> Result<(), ServerError> {
 
     let mut server = Server::bind(&socket_path)?;
     info!(target: "server", "Listening on socket at {}", socket_path);
-    server.start(server_handler(midi_client, state))
+    server.start(server_handler(midi_client, state));
+    Ok(())
 }
 
 fn midi_message_handler(state: Arc<RwLock<State>>) -> impl Fn(Message, u64) {

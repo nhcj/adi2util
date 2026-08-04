@@ -47,20 +47,33 @@ impl Server {
         })
     }
 
-    pub fn start<F>(&mut self, mut f: F) -> Result<(), ServerError>
+    pub fn start<F>(&mut self, mut f: F)
         where F: FnMut(Request) -> Result<Response, HandlerError>
     {
         for stream in self.listener.incoming() {
-            let mut ipc_stream = IPCStream::new(stream?);
-            let request = ipc_stream.read_message()?;
-            info!("Received request: {:?}", request);
-            let response = f(request).unwrap_or_else(|e| {
-                error!("Error handling request: {:?}", e);
-                Response::Err(e.to_string())
-            });
-            ipc_stream.send_message(response)?;
+            match stream {
+                Ok(stream) => { 
+                    if let Err(e) = Self::handle(IPCStream::new(stream), &mut f) {
+                        error!("Error with stream: {:?}", e);
+                    }
+                },
+                Err(e) => {
+                    error!("Failed to accept connection: {:?}", e);
+                }
+            }
         }
-        Ok(())
+    }
+
+    fn handle<F>(mut stream: IPCStream, mut f: F) -> Result<(), ServerError>
+        where F: FnMut(Request) -> Result<Response, HandlerError>
+    {
+        let request = stream.read_message()?;
+        info!("Received request: {:?}", request);
+        let response = f(request).unwrap_or_else(|e| {
+            error!("Error handling request: {:?}", e);
+            Response::Err(e.to_string())
+        });
+        Ok(stream.send_message(response)?)
     }
 }
 
