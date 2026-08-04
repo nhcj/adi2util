@@ -1,4 +1,4 @@
-use std::{io::{Read, Write}, os::unix::net::UnixStream, path::Path};
+use std::{io::{Read, Write}, os::unix::net::UnixStream, path::Path, time::Duration};
 
 use crate::midi::{ChannelAddress, ChannelParameter, ChannelParameterType, DeviceParameter, DeviceParameterType};
 use crate::state::State;
@@ -63,6 +63,8 @@ pub enum Response {
 }
 
 pub const DEFAULT_MAX_MESSAGE_SIZE: u32 = 1 << 20;
+const DEFAULT_STREAM_READ_TIMEOUT: Duration = Duration::from_secs(1);
+const DEFAULT_STREAM_WRITE_TIMEOUT: Duration = Duration::from_secs(1);
 
 pub struct IPCStream {
     stream: UnixStream,
@@ -70,20 +72,23 @@ pub struct IPCStream {
 }
 
 impl IPCStream {
-    pub fn new(stream: UnixStream) -> IPCStream {
+    pub fn new(stream: UnixStream) -> Result<IPCStream, IPCError> {
         Self::new_with_max_size(stream, DEFAULT_MAX_MESSAGE_SIZE)
     }
 
     pub fn connect<P: AsRef<Path>>(socket_path: P) -> Result<IPCStream, IPCError> {
         let stream = UnixStream::connect(socket_path)?;
-        Ok(Self::new(stream))
+        Self::new(stream)
     }
 
-    pub fn new_with_max_size(stream: UnixStream, max_message_size: u32) -> IPCStream {
-        IPCStream {
+    pub fn new_with_max_size(stream: UnixStream, max_message_size: u32) -> Result<IPCStream, IPCError> {
+        stream.set_read_timeout(Some(DEFAULT_STREAM_READ_TIMEOUT))?;
+        stream.set_write_timeout(Some(DEFAULT_STREAM_WRITE_TIMEOUT))?;
+
+        Ok(IPCStream {
             stream,
             max_message_size,
-        }
+        })
     }
 
     pub fn make_request(&mut self, r: Request) -> Result<Response, IPCError> {

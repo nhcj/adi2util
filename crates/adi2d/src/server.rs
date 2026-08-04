@@ -53,8 +53,15 @@ impl Server {
         for stream in self.listener.incoming() {
             match stream {
                 Ok(stream) => { 
-                    if let Err(e) = Self::handle(IPCStream::new(stream), &mut f) {
-                        error!("Error with stream: {:?}", e);
+                    match IPCStream::new(stream) {
+                        Ok(stream) => {
+                            if let Err(e) = Self::handle(stream, &mut f) {
+                                error!("Error with stream: {:?}", e);
+                            }
+                        }
+                        Err(e) => {
+                            error!("Failed to create IPC stream: {:?}", e);
+                        }
                     }
                 },
                 Err(e) => {
