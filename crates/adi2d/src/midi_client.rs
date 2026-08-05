@@ -2,11 +2,10 @@ use midir::{
     MidiIO, MidiInput, MidiInputConnection, MidiOutput, MidiOutputConnection
 };
 use thiserror::Error;
-use std::{sync::{Arc, Mutex, atomic::{AtomicU64, Ordering}}, time::Duration};
+use std::{sync::{Arc, Mutex, PoisonError, atomic::{AtomicU64, Ordering}}, time::Duration};
 
 use adi2::{devices::{self, Device}, midi::{self, Message, MidiCommand, MidiRequests, encode_sysex}};
 use log::error;
-
 
 #[derive(Debug, Error)]
 pub enum MidiClientError {
@@ -83,7 +82,7 @@ impl MidiClient {
         let data = encode_sysex(device, cmd)?;
         output_conn
             .lock()
-            .unwrap()
+            .unwrap_or_else(PoisonError::into_inner)
             .send(&data)?;
         Ok(())
     }

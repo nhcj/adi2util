@@ -1,4 +1,4 @@
-use std::{env, fs, process, sync::{Arc, RwLock}};
+use std::{env, fs, process, sync::{Arc, PoisonError, RwLock}};
 
 use adi2::{devices::Device, ipc::{GetRequest, Request, Response, SetRequest}, midi::{ChannelParameter, Message}, state::State};
 use log::{error, info};
@@ -31,7 +31,7 @@ pub fn run(port_name: &str, device: Device) -> Result<(), ServerError> {
 
 fn midi_message_handler(state: Arc<RwLock<State>>) -> impl Fn(Message, u64) {
     move |message, _| {
-        let mut state = state.write().unwrap();
+        let mut state = state.write().unwrap_or_else(PoisonError::into_inner);
         match message {
             Message::Status(status) => {
                 state.set_active_output(status.active_output);
@@ -54,7 +54,7 @@ fn server_handler(mut client: MidiClient, state: Arc<RwLock<State>>) -> impl FnM
     move |req| {
         match req {
             Request::Get(g) => {
-                let state = state.read().unwrap();
+                let state = state.read().unwrap_or_else(PoisonError::into_inner);
                 match g {
                     GetRequest::State => Ok(Response::State(state.clone())),
                     GetRequest::CurrentChannelParameter(_type) => Ok(Response::ChannelParameter(state.get_channel_parameter_value(None, _type))),
@@ -65,7 +65,7 @@ fn server_handler(mut client: MidiClient, state: Arc<RwLock<State>>) -> impl FnM
             Request::Set(s) => {
                 match s {
                     SetRequest::CurrentChannelParameter(_type, value) => {
-                        let active_output = state.read().unwrap().active_output.ok_or(HandlerError::ActiveOutputUnset)?;
+                        let active_output = state.read().unwrap_or_else(PoisonError::into_inner).active_output.ok_or(HandlerError::ActiveOutputUnset)?;
                         let param = ChannelParameter {
                             address: active_output.into(),
                             parameter: _type,
