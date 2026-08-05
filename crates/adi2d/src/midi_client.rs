@@ -2,7 +2,7 @@ use midir::{
     MidiIO, MidiInput, MidiInputConnection, MidiOutput, MidiOutputConnection
 };
 use thiserror::Error;
-use std::{sync::{Arc, Mutex, PoisonError, atomic::{AtomicU64, Ordering}}, time::Duration};
+use std::{char::MAX, sync::{Arc, Mutex, PoisonError, atomic::{AtomicU64, Ordering}}, time::Duration};
 
 use adi2::{devices::{self, Device}, midi::{self, Message, MidiCommand, MidiRequests, encode_sysex}};
 use log::error;
@@ -52,6 +52,9 @@ impl MidiClient {
             )
             .unwrap();
 
+        // Fail early if we can't send a message for some reason, instead of waiting for the backoff
+        Self::_send_command(device, &output_conn, &MidiRequests::Status).expect("Failed to send initial status request");
+
         let client = MidiClient {
             device,
             input_conn,
@@ -64,13 +67,29 @@ impl MidiClient {
     }
 
     fn spawn_status_poller(&self, poll_interval: Duration) {
+        const MAX_CONSECUTIVE_FAILURES: u32 = 8;
+
         let device = self.device;
         let output_conn = self.output_conn.clone();
-        std::thread::spawn(move || loop {
-            if let Err(e) = Self::_send_command(device, &output_conn, &MidiRequests::Status) {
-                error!("error polling status: {:?}", e);
+
+        std::thread::spawn(move || {
+            let mut consecutive_failures = 0;
+            loop {
+                if let Err(e) = Self::_send_command(device, &output_conn, &MidiRequests::Status) {
+                    consecutive_failures += 1;
+                    if consecutive_failures < MAX_CONSECUTIVE_FAILURES {
+                        let backoff_time = Duration::from_secs(2u8.pow(consecutive_failures - 1) as u64);
+                        error!("error polling status (attempt {}/{}, waiting {} seconds): {:?}", consecutive_failures, MAX_CONSECUTIVE_FAILURES, backoff_time.as_secs(), e);
+                        std::thread::sleep(backoff_time);
+                        continue;
+                    } else {
+                        error!("failed to poll status {} consecutive times, terminating daemon: {:?}", consecutive_failures, e);
+                        std::process::exit(1);
+                    }
+                }
+                consecutive_failures = 0;
+                std::thread::sleep(poll_interval);
             }
-            std::thread::sleep(poll_interval);
         });
     }
 
