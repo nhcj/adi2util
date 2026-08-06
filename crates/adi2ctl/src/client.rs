@@ -18,27 +18,32 @@ impl Client {
         stream.make_request(req)
     }
 
-    pub fn get_state(&self) -> Result<State, IPCError> {
-        self.send_request(Request::Get(GetRequest::State)).map(|r| {
-            match r {
-                Response::State(s) => s,
-                // TODO
-                _ => unreachable!()
-            }
-        })
+    pub fn get_state(&self) -> Result<Response, IPCError> {
+        self.send_request(Request::Get(GetRequest::State))
     }
 
     pub fn set_current_channel_parameter_value(&self, _type: ChannelParameterType, value: i16) -> Result<Response, IPCError> {
         self.send_request(Request::Set(SetRequest::CurrentChannelParameter(_type, value)))
     }
 
+    pub fn adjust_current_channel_parameter_value(
+        &self,
+        _type: ChannelParameterType,
+        change: i16,
+        min: i16,
+        max: i16,
+    ) -> Result<Response, IPCError> {
+        self.send_request(Request::Set(SetRequest::AdjustCurrentChannelParameter {
+            parameter: _type,
+            change,
+            allowed_range: (min, max),
+        }))
+    }
+
     pub fn get_current_channel_parameter_value(&self, _type: ChannelParameterType) -> Result<Option<i16>, IPCError> {
-        self.send_request(Request::Get(GetRequest::CurrentChannelParameter(_type))).map(|r| {
-            match r {
-                Response::ChannelParameter(p) => p,
-                // TODO
-                _ => unreachable!()
-            }
+        self.send_request(Request::Get(GetRequest::CurrentChannelParameter(_type))).map(|r| match r {
+            Response::ChannelParameter(p) => p,
+            _ => None,
         })
     }
 }

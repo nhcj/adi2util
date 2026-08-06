@@ -2,7 +2,7 @@ mod client;
 
 use std::{env, fs, process};
 
-use adi2::midi::ChannelParameterType;
+use adi2::{ipc::Response, midi::ChannelParameterType};
 use clap::{Args, Parser, Subcommand};
 
 use crate::client::Client;
@@ -14,6 +14,7 @@ const VOLUME_UNIT_CHANGE: i16 = 25;
 // don't allow going above -30 dBr
 // TODO: also make this configurable/toggle-able
 const MAXIMUM_VOLUME: i16 = -300;
+const MINIMUM_VOLUME: i16 = -1145;
 
 #[derive(Parser)]
 struct Cli {
@@ -49,34 +50,54 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
     match cli.command {
         Commands::Status => {
+            match client.get_state() {
+                Ok(Response::State(s)) => println!("{:?}", s),
+                Ok(Response::Err(e)) => exit_with_error(e.into()),
+                Err(e)=> exit_with_error(e.into()),
+                Ok(r) => {
+                    eprintln!("Unexpected response from server: {:?}", r);
+                    process::exit(1);
+                }
+            }
             let state = client.get_state()?;
             println!("{:?}", state);
         }
         Commands::IncrementVolume | Commands::DecrementVolume => {
-            let current_volume = client.get_current_channel_parameter_value(ChannelParameterType::Volume)?;
-            let Some(current_volume) = current_volume else { 
-                eprintln!("Volume for currently active output couldn't be found");
-                process::exit(2);
+            let change = match cli.command {
+                Commands::DecrementVolume => -VOLUME_UNIT_CHANGE,
+                _ => VOLUME_UNIT_CHANGE,
             };
-            let mut change = VOLUME_UNIT_CHANGE;
-            if matches!(cli.command, Commands::DecrementVolume) {
-                change *= -1;
+            match client.adjust_current_channel_parameter_value(ChannelParameterType::Volume, change, MINIMUM_VOLUME, MAXIMUM_VOLUME) {
+                Ok(Response::ChannelParameter(Some(v))) => println!("{}", v),
+                Ok(Response::Err(e)) => exit_with_error(e.into()),
+                Err(e)=> exit_with_error(e.into()),
+                Ok(r) => {
+                    eprintln!("Unexpected response from server: {:?}", r);
+                    process::exit(1);
+                }
             }
-            let mut volume = current_volume + change;
-            if volume > MAXIMUM_VOLUME {
-                eprintln!("Requested volume is higher than maximum {}; setting to maximum", MAXIMUM_VOLUME);
-                volume = MAXIMUM_VOLUME;
-            }
-            client.set_current_channel_parameter_value(ChannelParameterType::Volume, volume)?;
         }
         Commands::SetVolume(args) => {
-            let volume = if args.volume <= MAXIMUM_VOLUME { args.volume } else {
-                eprintln!("Requested volume is higher than maximum {}; setting to maximum", MAXIMUM_VOLUME);
-                MAXIMUM_VOLUME
-            };
-            client.set_current_channel_parameter_value(ChannelParameterType::Volume, volume)?;
+            let volume = args.volume.clamp(MINIMUM_VOLUME, MAXIMUM_VOLUME);
+            if volume != args.volume {
+                println!("Clamped volume to range [{}, {}]", MINIMUM_VOLUME, MAXIMUM_VOLUME);
+            }
+            match client.set_current_channel_parameter_value(ChannelParameterType::Volume, volume) {
+                Ok(Response::Ok) => {}
+                Ok(Response::Err(e)) => exit_with_error(e.into()),
+                Err(e) => exit_with_error(e.into()),
+                Ok(r) => {
+                    eprintln!("Unexpected response from server: {:?}", r);
+                    process::exit(1);
+                }
+            }
         }
     }
 
     Ok(())
+}
+
+fn exit_with_error(err: Box<dyn std::error::Error>) {
+    eprintln!("error: {:?}", err);
+    process::exit(1);
 }
