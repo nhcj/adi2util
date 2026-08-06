@@ -25,7 +25,7 @@ pub fn run(config: Config, port_name: &str, device: Device) -> Result<(), Server
 
     let mut server = Server::bind(&socket_path)?;
     info!(target: "server", "Listening on socket at {}", socket_path);
-    server.start(server_handler(midi_client, state));
+    server.start(server_handler(midi_client, state, config.hooks()));
     Ok(())
 }
 
@@ -46,10 +46,7 @@ fn midi_message_handler(state: Arc<RwLock<ServerState>>, hooks: Hooks) -> impl F
                     if state.active_output.is_some_and(|o| ChannelAddress::from(o) == param.address) {
                         let old = state.get_channel_parameter_value(None, param.parameter);
                         if state.set_channel_parameter_from_device(param) {
-                            match old {
-                                Some(old) => { hooks.run_channel_hooks(param.parameter, old, param.value) }
-                                None => { hooks.run_channel_hooks(param.parameter, "-", param.value); }
-                            }
+                            run_channel_hooks_on_change(&hooks, param, old);
                         }
                     }
                 }
@@ -63,7 +60,7 @@ fn midi_message_handler(state: Arc<RwLock<ServerState>>, hooks: Hooks) -> impl F
     }
 }
 
-fn server_handler(mut client: MidiClient, state: Arc<RwLock<ServerState>>) -> impl FnMut(Request) -> Result<Response, HandlerError> {
+fn server_handler(mut client: MidiClient, state: Arc<RwLock<ServerState>>, hooks: Hooks) -> impl FnMut(Request) -> Result<Response, HandlerError> {
     move |req| {
         match req {
             Request::Get(g) => {
@@ -85,8 +82,10 @@ fn server_handler(mut client: MidiClient, state: Arc<RwLock<ServerState>>) -> im
                             parameter: _type,
                             value,
                         };
+                        let old = state.get_channel_parameter_value(None, _type);
                         client.send_command(&param)?;
                         state.change_channel_parameter(&param);
+                        run_channel_hooks_on_change(&hooks, &param, old);
                     }
                     SetRequest::AdjustCurrentChannelParameter { parameter, change, allowed_range } => {
                         let active_output = state.active_output.ok_or(HandlerError::ActiveOutputUnset)?;
@@ -105,11 +104,14 @@ fn server_handler(mut client: MidiClient, state: Arc<RwLock<ServerState>>) -> im
                         };
                         client.send_command(&param)?;
                         state.change_channel_parameter(&param);
+                        run_channel_hooks_on_change(&hooks, &param, Some(current_value));
                         return Ok(Response::ChannelParameter(Some(new_value)));
                     }
                     SetRequest::ChannelParameter(param) => {
+                        let old = state.get_channel_parameter_value(Some(param.address), param.parameter);
                         client.send_command(&param)?;
                         state.change_channel_parameter(&param);
+                        run_channel_hooks_on_change(&hooks, &param, old);
                     }
                     SetRequest::DeviceParameter(param) => {
                         client.send_command(&param)?;
@@ -119,5 +121,15 @@ fn server_handler(mut client: MidiClient, state: Arc<RwLock<ServerState>>) -> im
                 Ok(Response::Ok)
             }
         }
+    }
+}
+
+fn run_channel_hooks_on_change(hooks: &Hooks, param: &ChannelParameter, old: Option<i16>) {
+    if old == Some(param.value) {
+        return;
+    }
+    match old {
+        Some(old) => { hooks.run_channel_hooks(param.parameter, old, param.value) }
+        None => { hooks.run_channel_hooks(param.parameter, "-", param.value); }
     }
 }
