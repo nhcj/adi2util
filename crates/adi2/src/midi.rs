@@ -1,3 +1,5 @@
+use std::fmt;
+
 use bitcode::{Encode, Decode};
 use thiserror::Error;
 
@@ -338,6 +340,12 @@ pub enum ChannelParameterType {
     LoudnessBassGain,
     LoudnessTrebleGain,
     LoudnessLowVolRef,
+}
+
+impl fmt::Display for ChannelParameterType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Debug::fmt(self, f)
+    }
 }
 
 impl TryFrom<u8> for ChannelParameterType {

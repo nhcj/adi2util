@@ -63,18 +63,45 @@ fn server_handler(mut client: MidiClient, state: Arc<RwLock<State>>) -> impl FnM
                 }
             }
             Request::Set(s) => {
+                let mut state = state.write().unwrap_or_else(PoisonError::into_inner);
                 match s {
                     SetRequest::CurrentChannelParameter(_type, value) => {
-                        let active_output = state.read().unwrap_or_else(PoisonError::into_inner).active_output.ok_or(HandlerError::ActiveOutputUnset)?;
+                        let active_output = state.active_output.ok_or(HandlerError::ActiveOutputUnset)?;
                         let param = ChannelParameter {
                             address: active_output.into(),
                             parameter: _type,
                             value,
                         };
                         client.send_command(&param)?;
+                        state.set_channel_parameter(&param);
                     }
-                    SetRequest::ChannelParameter(param) => { client.send_command(&param)?; }
-                    SetRequest::DeviceParameter(param) => { client.send_command(&param)?; }
+                    SetRequest::AdjustCurrentChannelParameter { parameter, change, allowed_range } => {
+                        let active_output = state.active_output.ok_or(HandlerError::ActiveOutputUnset)?;
+                        let Some(current_value) = state.get_channel_parameter_value(None, parameter) else {
+                            return Ok(Response::Err(format!("No current value for the active output's channel parameter {}", parameter)));
+                        };
+                        let (min, max) = allowed_range;
+                        if min > max {
+                            return Ok(Response::Err(format!("Adjustment range has min ({}) larger than max ({})", min, max)));
+                        }
+                        let new_value = current_value.saturating_add(change).clamp(min, max);
+                        let param = ChannelParameter {
+                            address: active_output.into(),
+                            parameter,
+                            value: new_value,
+                        };
+                        client.send_command(&param)?;
+                        state.set_channel_parameter(&param);
+                        return Ok(Response::ChannelParameter(Some(new_value)));
+                    }
+                    SetRequest::ChannelParameter(param) => {
+                        client.send_command(&param)?;
+                        state.set_channel_parameter(&param);
+                    }
+                    SetRequest::DeviceParameter(param) => {
+                        client.send_command(&param)?;
+                        state.set_device_parameter(&param);
+                    }
                 }
                 Ok(Response::Ok)
             }

@@ -49,6 +49,11 @@ pub enum GetRequest {
 #[derive(Debug, Decode, Encode)]
 pub enum SetRequest {
     CurrentChannelParameter(ChannelParameterType, i16),
+    AdjustCurrentChannelParameter {
+        parameter: ChannelParameterType,
+        change: i16,
+        allowed_range: (i16, i16),
+    },
     ChannelParameter(ChannelParameter),
     DeviceParameter(DeviceParameter),
 }
