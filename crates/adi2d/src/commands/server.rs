@@ -125,11 +125,9 @@ fn server_handler(mut client: MidiClient, state: Arc<RwLock<ServerState>>, hooks
 }
 
 fn run_channel_hooks_on_change(hooks: &Hooks, param: &ChannelParameter, old: Option<i16>) {
-    if old == Some(param.value) {
+    let Some(old) = old else { return };
+    if old == param.value {
         return;
     }
-    match old {
-        Some(old) => { hooks.run_channel_hooks(param.parameter, old, param.value) }
-        None => { hooks.run_channel_hooks(param.parameter, "-", param.value); }
-    }
+    hooks.run_channel_hooks(param.parameter, old, param.value);
 }
