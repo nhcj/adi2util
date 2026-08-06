@@ -1,9 +1,9 @@
 use std::{env, fs, process, sync::{Arc, PoisonError, RwLock}};
 
-use adi2::{devices::Device, ipc::{GetRequest, Request, Response, SetRequest}, midi::{ChannelParameter, Message}, state::State};
+use adi2::{devices::Device, ipc::{GetRequest, Request, Response, SetRequest}, midi::{ChannelParameter, Message}};
 use log::{error, info};
 
-use crate::{midi_client::{MidiClient, MidiClientError}, server::{HandlerError, Server, ServerError}};
+use crate::{midi_client::{MidiClient, MidiClientError}, server::{HandlerError, Server, ServerError}, server_state::ServerState};
 
 pub fn run(port_name: &str, device: Device) -> Result<(), ServerError> {
     let xdg_runtime_dir = env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| {
@@ -19,7 +19,7 @@ pub fn run(port_name: &str, device: Device) -> Result<(), ServerError> {
         });
     }
     let socket_path = format!("{}/socket", &runtime_path);
-    let state = Arc::new(RwLock::new(State::new()));
+    let state = Arc::new(RwLock::new(ServerState::default()));
     let midi_client = MidiClient::from_port_name(port_name, device, midi_message_handler(state.clone()));
     info!(target: "midi_client", "Using port '{}'", midi_client.port_name());
 
@@ -29,7 +29,7 @@ pub fn run(port_name: &str, device: Device) -> Result<(), ServerError> {
     Ok(())
 }
 
-fn midi_message_handler(state: Arc<RwLock<State>>) -> impl Fn(Message, u64) {
+fn midi_message_handler(state: Arc<RwLock<ServerState>>) -> impl Fn(Message, u64) {
     move |message, _| {
         let mut state = state.write().unwrap_or_else(PoisonError::into_inner);
         match message {
@@ -38,11 +38,11 @@ fn midi_message_handler(state: Arc<RwLock<State>>) -> impl Fn(Message, u64) {
             }
             Message::Parameters(params) => {
                 for param in params.channel.iter() {
-                    state.set_channel_parameter(param);
+                    state.set_channel_parameter_from_device(param);
                 }
 
                 for param in params.device.iter() {
-                    state.set_device_parameter(param);
+                    state.set_device_parameter_from_device(param);
                 }
             }
             Message::Ignore => {}
@@ -50,7 +50,7 @@ fn midi_message_handler(state: Arc<RwLock<State>>) -> impl Fn(Message, u64) {
     }
 }
 
-fn server_handler(mut client: MidiClient, state: Arc<RwLock<State>>) -> impl FnMut(Request) -> Result<Response, HandlerError> {
+fn server_handler(mut client: MidiClient, state: Arc<RwLock<ServerState>>) -> impl FnMut(Request) -> Result<Response, HandlerError> {
     move |req| {
         match req {
             Request::Get(g) => {
@@ -73,7 +73,7 @@ fn server_handler(mut client: MidiClient, state: Arc<RwLock<State>>) -> impl FnM
                             value,
                         };
                         client.send_command(&param)?;
-                        state.set_channel_parameter(&param);
+                        state.change_channel_parameter(&param);
                     }
                     SetRequest::AdjustCurrentChannelParameter { parameter, change, allowed_range } => {
                         let active_output = state.active_output.ok_or(HandlerError::ActiveOutputUnset)?;
@@ -91,16 +91,16 @@ fn server_handler(mut client: MidiClient, state: Arc<RwLock<State>>) -> impl FnM
                             value: new_value,
                         };
                         client.send_command(&param)?;
-                        state.set_channel_parameter(&param);
+                        state.change_channel_parameter(&param);
                         return Ok(Response::ChannelParameter(Some(new_value)));
                     }
                     SetRequest::ChannelParameter(param) => {
                         client.send_command(&param)?;
-                        state.set_channel_parameter(&param);
+                        state.change_channel_parameter(&param);
                     }
                     SetRequest::DeviceParameter(param) => {
                         client.send_command(&param)?;
-                        state.set_device_parameter(&param);
+                        state.change_device_parameter(&param);
                     }
                 }
                 Ok(Response::Ok)

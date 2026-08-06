@@ -1,6 +1,7 @@
 mod commands;
 mod midi_client;
 mod server;
+mod server_state;
 
 use adi2::devices::Device;
 use clap::{Parser, Subcommand};
