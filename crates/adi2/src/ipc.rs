@@ -54,6 +54,8 @@ pub enum SetRequest {
         change: i16,
         allowed_range: (i16, i16),
     },
+    // maybe make some kind of binary parameter type so this is safer?
+    ToggleCurrentChannelParameter(ChannelParameterType),
     ChannelParameter(ChannelParameter),
     DeviceParameter(DeviceParameter),
 }

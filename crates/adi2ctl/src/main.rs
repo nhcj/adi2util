@@ -3,7 +3,7 @@ mod client;
 use std::{env, fs, process};
 
 use adi2::{ipc::Response, midi::ChannelParameterType};
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 
 use crate::client::Client;
 
@@ -28,12 +28,26 @@ enum Commands {
     IncrementVolume,
     DecrementVolume,
     SetVolume(SetVolumeArgs),
+    Mute(MuteArgs),
 }
 
 #[derive(Args)]
 struct SetVolumeArgs {
     #[arg(allow_hyphen_values = true)]
     volume: i16,
+}
+
+#[derive(Args)]
+struct MuteArgs {
+    #[arg(default_value = "on")]
+    state: MuteState,
+}
+
+#[derive(Clone, ValueEnum)]
+enum MuteState {
+    On,
+    Off,
+    Toggle,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -84,6 +98,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             match client.set_current_channel_parameter_value(ChannelParameterType::Volume, volume) {
                 Ok(Response::Ok) => {}
+                Ok(Response::Err(e)) => exit_with_error(e.into()),
+                Err(e) => exit_with_error(e.into()),
+                Ok(r) => {
+                    eprintln!("Unexpected response from server: {:?}", r);
+                    process::exit(1);
+                }
+            }
+        }
+        Commands::Mute(args) => {
+            let response = match args.state {
+                MuteState::On => client.set_current_channel_parameter_value(ChannelParameterType::Mute, 1),
+                MuteState::Off => client.set_current_channel_parameter_value(ChannelParameterType::Mute, 0),
+                MuteState::Toggle => client.toggle_current_channel_parameter(ChannelParameterType::Mute),
+            };
+            match response {
+                Ok(Response::Ok) => {}
+                Ok(Response::ChannelParameter(Some(v))) => println!("{}", if v == 0 { "off" } else { "on" }),
                 Ok(Response::Err(e)) => exit_with_error(e.into()),
                 Err(e) => exit_with_error(e.into()),
                 Ok(r) => {

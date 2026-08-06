@@ -40,6 +40,10 @@ impl Client {
         }))
     }
 
+    pub fn toggle_current_channel_parameter(&self, _type: ChannelParameterType) -> Result<Response, IPCError> {
+        self.send_request(Request::Set(SetRequest::ToggleCurrentChannelParameter(_type)))
+    }
+
     pub fn get_current_channel_parameter_value(&self, _type: ChannelParameterType) -> Result<Option<i16>, IPCError> {
         self.send_request(Request::Get(GetRequest::CurrentChannelParameter(_type))).map(|r| match r {
             Response::ChannelParameter(p) => p,

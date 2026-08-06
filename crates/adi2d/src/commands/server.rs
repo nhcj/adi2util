@@ -107,6 +107,24 @@ fn server_handler(mut client: MidiClient, state: Arc<RwLock<ServerState>>, hooks
                         run_channel_hooks_on_change(&hooks, &param, Some(current_value));
                         return Ok(Response::ChannelParameter(Some(new_value)));
                     }
+                    SetRequest::ToggleCurrentChannelParameter(parameter) => {
+                        let active_output = state.active_output.ok_or(HandlerError::ActiveOutputUnset)?;
+                        let Some(current) = state.get_channel_parameter_value(None, parameter) else {
+                            return Ok(Response::Err(format!("Failed to toggle {}: no current value available", parameter)));
+                        };
+                        let new = if current == 0 { 1 } else if current == 1 { 0 } else {
+                            return Ok(Response::Err(format!("Expected toggleable value of 0 or 1 for {} but found {}", parameter, current)));
+                        };
+                        let param = ChannelParameter {
+                            address: active_output.into(),
+                            parameter,
+                            value: new,
+                        };
+                        client.send_command(&param)?;
+                        state.change_channel_parameter(&param);
+                        run_channel_hooks_on_change(&hooks, &param, Some(current));
+                        return Ok(Response::ChannelParameter(Some(new)));
+                    }
                     SetRequest::ChannelParameter(param) => {
                         let old = state.get_channel_parameter_value(Some(param.address), param.parameter);
                         client.send_command(&param)?;
