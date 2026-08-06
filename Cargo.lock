@@ -27,6 +27,7 @@ dependencies = [
  "bitcode",
  "clap",
  "env_logger",
+ "libc",
  "log",
  "midir",
  "serde",

@@ -1,5 +1,6 @@
 mod commands;
 mod config;
+mod hooks;
 mod midi_client;
 mod server;
 mod server_state;

@@ -3,7 +3,7 @@ use std::{env, fs, process, sync::{Arc, PoisonError, RwLock}};
 use adi2::{devices::Device, ipc::{GetRequest, Request, Response, SetRequest}, midi::{ChannelAddress, ChannelParameter, Message}};
 use log::{error, info};
 
-use crate::{config::{Config, Hooks}, midi_client::{MidiClient, MidiClientError}, server::{HandlerError, Server, ServerError}, server_state::ServerState};
+use crate::{config::Config, hooks::Hooks, midi_client::{MidiClient, MidiClientError}, server::{HandlerError, Server, ServerError}, server_state::ServerState};
 
 pub fn run(config: Config, port_name: &str, device: Device) -> Result<(), ServerError> {
     let xdg_runtime_dir = env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| {
@@ -20,12 +20,13 @@ pub fn run(config: Config, port_name: &str, device: Device) -> Result<(), Server
     }
     let socket_path = format!("{}/socket", &runtime_path);
     let state = Arc::new(RwLock::new(ServerState::default()));
-    let midi_client = MidiClient::from_port_name(port_name, device, midi_message_handler(state.clone(), config.hooks()));
+    let hooks = config.hooks();
+    let midi_client = MidiClient::from_port_name(port_name, device, midi_message_handler(state.clone(), hooks.clone()));
     info!(target: "midi_client", "Using port '{}'", midi_client.port_name());
 
     let mut server = Server::bind(&socket_path)?;
     info!(target: "server", "Listening on socket at {}", socket_path);
-    server.start(server_handler(midi_client, state, config.hooks()));
+    server.start(server_handler(midi_client, state, hooks));
     Ok(())
 }
 
