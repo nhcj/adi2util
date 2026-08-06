@@ -5,4 +5,5 @@ edition = "2024"
 
 [dependencies]
 bitcode = { workspace = true }
+serde = { workspace = true }
 thiserror = { workspace = true }

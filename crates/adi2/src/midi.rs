@@ -1,6 +1,7 @@
 use std::fmt;
 
 use bitcode::{Encode, Decode};
+use serde::Deserialize;
 use thiserror::Error;
 
 use crate::devices::Device;
@@ -88,7 +89,7 @@ impl MidiCommand for MidiRequests {
 }
 
 #[repr(u8)]
-#[derive(Copy, Clone, Debug, Decode, Encode, Eq, Hash, PartialEq)]
+#[derive(Copy, Clone, Debug, Decode, Deserialize, Encode, Eq, Hash, PartialEq)]
 pub enum Output {
     Line = 0,
     Phones = 1,
@@ -98,6 +99,12 @@ pub enum Output {
 impl Output {
     fn channel_address(&self) -> u8 {
         (*self as u8 + 1) * 3
+    }
+}
+
+impl fmt::Display for Output {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Debug::fmt(self, f)
     }
 }
 
@@ -315,7 +322,7 @@ impl DeviceParameter {
 }
 
 #[repr(u8)]
-#[derive(Clone, Copy, Debug, Decode, Encode, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Decode, Deserialize, Encode, Eq, Hash, PartialEq)]
 pub enum ChannelParameterType {
     Source = 1,
     RefLevel,
@@ -382,7 +389,7 @@ impl TryFrom<u8> for ChannelParameterType {
 }
 
 #[repr(u8)]
-#[derive(Clone, Copy, Debug, Decode, Encode, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Decode, Deserialize, Encode, Eq, Hash, PartialEq)]
 pub enum DeviceParameterType {
     MuteLineVs = 1,
     AutoStandby = 2,
@@ -416,6 +423,12 @@ pub enum DeviceParameterType {
     SRCMode = 41,
     SRCGainDig = 42,
     OpticalOutSource = 43,
+}
+
+impl fmt::Display for DeviceParameterType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Debug::fmt(self, f)
+    }
 }
 
 impl TryFrom<u8> for DeviceParameterType {

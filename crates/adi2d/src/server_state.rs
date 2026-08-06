@@ -23,17 +23,18 @@ impl Deref for ServerState {
 }
 
 impl ServerState {
-    pub fn set_channel_parameter_from_device(&mut self, param: &ChannelParameter) {
+    pub fn set_channel_parameter_from_device(&mut self, param: &ChannelParameter) -> bool {
         let key = (param.address, param.parameter);
         match self.pending_channel_changes.get(&key) {
             // Pending state is reconciled with device state
             Some((v, _)) if *v == param.value => {
                 self.pending_channel_changes.remove(&key);
             }
-            Some((_, t)) if t.elapsed() < Duration::from_secs(1) => { return; }
+            Some((_, t)) if t.elapsed() < Duration::from_secs(1) => { return false; }
             _ => { self.pending_channel_changes.remove(&key); }
         }
         self.state.set_channel_parameter(param);
+        true
     }
 
     pub fn change_channel_parameter(&mut self, param: &ChannelParameter) {
