@@ -12,6 +12,17 @@
       overlays = [ rust-overlay.overlays.default ];
     }));
   in {
+    packages = forAllPlatforms (pkgs:
+      let
+        rustPlatform = pkgs.makeRustPlatform {
+          cargo = pkgs.rust-bin.stable.latest.minimal;
+          rustc = pkgs.rust-bin.stable.latest.minimal;
+        };
+      in {
+        adi2d = pkgs.callPackage ./nix/adi2d.nix { inherit rustPlatform; };
+        adi2ctl = pkgs.callPackage ./nix/adi2ctl.nix { inherit rustPlatform; };
+      });
+
     devShells = forAllPlatforms (pkgs: {
       default = pkgs.mkShell {
         buildInputs = with pkgs; [
