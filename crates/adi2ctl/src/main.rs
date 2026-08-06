@@ -37,6 +37,8 @@ struct SetVolumeArgs {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let cli = Cli::parse();
+
     let xdg_runtime_dir = env::var("XDG_RUNTIME_DIR").expect("XDG_RUNTIME_DIR not set");
     let runtime_path = format!("{}/adi2d", xdg_runtime_dir);
     let socket_path = format!("{}/socket", &runtime_path);
@@ -44,10 +46,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         eprintln!("adi2d is not running; no socket found in {}", runtime_path);
         process::exit(1);
     }
-
     let client = Client::new(socket_path);
 
-    let cli = Cli::parse();
     match cli.command {
         Commands::Status => {
             match client.get_state() {
