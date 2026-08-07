@@ -29,6 +29,7 @@ enum Commands {
     DecrementVolume,
     SetVolume(SetVolumeArgs),
     Mute(MuteArgs),
+    SetSource(SetSourceArgs),
 }
 
 #[derive(Args)]
@@ -48,6 +49,21 @@ enum MuteState {
     On,
     Off,
     Toggle,
+}
+
+#[derive(Args)]
+struct SetSourceArgs {
+    source: Source,
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+enum Source {
+    Auto = 0,
+    Spdif = 1,
+    Optical = 2,
+    Usb = 3,
+    UsbRecCoax = 4,
+    UsbRecOptical = 5,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -97,6 +113,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("Clamped volume to range [{}, {}]", MINIMUM_VOLUME, MAXIMUM_VOLUME);
             }
             match client.set_current_channel_parameter_value(ChannelParameterType::Volume, volume) {
+                Ok(Response::Ok) => {}
+                Ok(Response::Err(e)) => exit_with_error(e.into()),
+                Err(e) => exit_with_error(e.into()),
+                Ok(r) => {
+                    eprintln!("Unexpected response from server: {:?}", r);
+                    process::exit(1);
+                }
+            }
+        }
+        Commands::SetSource(args) => {
+            match client.set_current_channel_parameter_value(ChannelParameterType::Source, args.source as i16) {
                 Ok(Response::Ok) => {}
                 Ok(Response::Err(e)) => exit_with_error(e.into()),
                 Err(e) => exit_with_error(e.into()),
