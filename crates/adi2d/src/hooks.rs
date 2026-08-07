@@ -116,8 +116,8 @@ fn run_hook(hook: RunHook) {
                 if !status.success() {
                     let stderr = read_stderr_to_string(&mut child);
                     error!("hook for {} (`{}`) exited with {}: {}", hook.parameter, hook.command, status, stderr.trim());
-                    return
                 }
+                return
             }
             Ok(None) if Instant::now() >= timeout => {
                 kill_process_group(&mut child);
