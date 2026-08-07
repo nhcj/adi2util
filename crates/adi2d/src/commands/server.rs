@@ -44,11 +44,10 @@ fn midi_message_handler(state: Arc<RwLock<ServerState>>, hooks: Hooks) -> impl F
             }
             Message::Parameters(params) => {
                 for param in params.channel.iter() {
-                    if state.active_output.is_some_and(|o| ChannelAddress::from(o) == param.address) {
-                        let old = state.get_channel_parameter_value(None, param.parameter);
-                        if state.set_channel_parameter_from_device(param) {
-                            run_channel_hooks_on_change(&hooks, param, old);
-                        }
+                    let is_active = state.active_output.is_some_and(|o| ChannelAddress::from(o) == param.address);
+                    let old = state.get_channel_parameter_value(Some(param.address), param.parameter);
+                    if state.set_channel_parameter_from_device(param) && is_active {
+                        run_channel_hooks_on_change(&hooks, param, old);
                     }
                 }
 
