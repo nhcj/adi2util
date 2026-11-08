@@ -24,10 +24,14 @@ impl Config {
     }
 
     fn config_file_path() -> PathBuf {
-        let config_dir = env::var("XDG_CONFIG_HOME")
-            .map(|s| PathBuf::from(format!("{}/adi2d", s)))
-            .expect("XDG_CONFIG_HOME must be set");
-        config_dir.join("config.toml")
+        let config_home = match env::var_os("XDG_CONFIG_HOME") {
+            Some(dir) if !dir.is_empty() => PathBuf::from(dir),
+            _ => {
+                let home = env::var_os("HOME").expect("HOME or XDG_CONFIG_HOME must be set");
+                PathBuf::from(home).join(".config")
+            }
+        };
+        config_home.join("adi2d").join("config.toml")
     }
 
     pub fn hooks(&self) -> Hooks {
