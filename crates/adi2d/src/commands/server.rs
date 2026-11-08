@@ -1,31 +1,30 @@
-use std::{env, fs, process, sync::{Arc, PoisonError, RwLock}};
+use std::{fs, process, sync::{Arc, PoisonError, RwLock}};
 
-use adi2::{devices::Device, ipc::{GetRequest, Request, Response, SetRequest}, midi::{ChannelAddress, ChannelParameter, Message}};
+use adi2::{devices::Device, ipc::{GetRequest, Request, Response, SetRequest}, midi::{ChannelAddress, ChannelParameter, Message}, paths};
 use log::{error, info};
 
 use crate::{config::Config, hooks::Hooks, midi_client::{MidiClient, MidiClientError}, server::{HandlerError, Server, ServerError}, server_state::ServerState};
 
 pub fn run(config: Config, port_name: &str, device: Device) -> Result<(), ServerError> {
-    let xdg_runtime_dir = env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| {
-        error!(target: "server", "XDG_RUNTIME_DIR must be set");
+    let runtime_path = paths::runtime_dir().unwrap_or_else(|e| {
+        error!(target: "server", "{}", e);
         process::exit(1);
     });
-    let runtime_path = format!("{}/adi2d", xdg_runtime_dir);
-    info!(target: "server", "Setting runtime path to {}", runtime_path);
+    info!(target: "server", "Setting runtime path to {}", runtime_path.display());
     if !fs::exists(&runtime_path)? {
         fs::create_dir(&runtime_path).unwrap_or_else(|e| {
-            error!(target: "server", "Error creating runtime path {}: {}", runtime_path, e);
+            error!(target: "server", "Error creating runtime path {}: {}", runtime_path.display(), e);
             process::exit(1);
         });
     }
-    let socket_path = format!("{}/socket", &runtime_path);
+    let socket_path = paths::socket_path(&runtime_path);
     let state = Arc::new(RwLock::new(ServerState::default()));
     let hooks = config.hooks();
     let midi_client = MidiClient::from_port_name(port_name, device, midi_message_handler(state.clone(), hooks.clone()));
     info!(target: "midi_client", "Using port '{}'", midi_client.port_name());
 
     let mut server = Server::bind(&socket_path)?;
-    info!(target: "server", "Listening on socket at {}", socket_path);
+    info!(target: "server", "Listening on socket at {}", socket_path.display());
     server.start(server_handler(midi_client, state, hooks));
     Ok(())
 }

@@ -1,8 +1,8 @@
 mod client;
 
-use std::{env, fs, process};
+use std::{fs, process};
 
-use adi2::{ipc::Response, midi::ChannelParameterType};
+use adi2::{ipc::Response, midi::ChannelParameterType, paths};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
 use crate::client::Client;
@@ -69,11 +69,13 @@ enum Source {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
-    let xdg_runtime_dir = env::var("XDG_RUNTIME_DIR").expect("XDG_RUNTIME_DIR not set");
-    let runtime_path = format!("{}/adi2d", xdg_runtime_dir);
-    let socket_path = format!("{}/socket", &runtime_path);
+    let runtime_path = paths::runtime_dir().unwrap_or_else(|e| {
+        eprintln!("error: {}", e);
+        process::exit(1);
+    });
+    let socket_path = paths::socket_path(&runtime_path);
     if !fs::exists(&socket_path).expect("Failed to check if adi2d socket exists") {
-        eprintln!("adi2d is not running; no socket found in {}", runtime_path);
+        eprintln!("adi2d is not running; no socket found in {}", runtime_path.display());
         process::exit(1);
     }
     let client = Client::new(socket_path);
