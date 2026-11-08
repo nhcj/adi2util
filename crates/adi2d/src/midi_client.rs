@@ -42,7 +42,8 @@ impl MidiClient {
         let port_prefix = name.to_string();
         let on_event: EventHandler = Arc::new(on_event);
         let link_output_conn = output_conn.clone();
-        // MIDI clients are created on the link thread so they don't need to be Send
+        // MIDI clients are created on the link thread so they don't need to be Send, and
+        // so CoreMIDI delivers its notifications to that thread's run loop
         thread::spawn(move || Link::new(port_prefix, device, config, on_event, link_output_conn).run());
 
         MidiClient {
@@ -134,6 +135,7 @@ impl Link {
 
     fn run(mut self) {
         loop {
+            process_midi_notifications();
             if self.input_conn.is_none() {
                 self.try_connect();
             }
@@ -215,3 +217,15 @@ fn first_port_with_name<T: MidiIO>(io: &T, name: &str) -> Option<(T::Port, Strin
             .map(|n| (p, n))
     })
 }
+
+// CoreMIDI only updates this process's device list (and so the port list) when it
+// handles notifications on the run loop of the thread that created the first client
+#[cfg(target_os = "macos")]
+fn process_midi_notifications() {
+    use core_foundation::runloop::{CFRunLoop, kCFRunLoopDefaultMode};
+
+    CFRunLoop::run_in_mode(unsafe { kCFRunLoopDefaultMode }, Duration::ZERO, false);
+}
+
+#[cfg(not(target_os = "macos"))]
+fn process_midi_notifications() {}
