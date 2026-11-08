@@ -27,6 +27,8 @@ pub enum ServerError {
 pub enum HandlerError {
     #[error("state does not have active output")]
     ActiveOutputUnset,
+    #[error("device is not connected")]
+    NotConnected,
     #[error("error with midi client: {0}")]
     MidiClientError(#[from] MidiClientError),
 }

@@ -62,4 +62,8 @@ impl ServerState {
     pub fn set_active_output(&mut self, output: Output) -> Option<Output> {
         self.state.set_active_output(output)
     }
+
+    pub fn set_connected(&mut self) {
+        self.state.connected = true;
+    }
 }

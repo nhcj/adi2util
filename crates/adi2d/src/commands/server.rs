@@ -3,7 +3,7 @@ use std::{fs, process, sync::{Arc, PoisonError, RwLock}};
 use adi2::{devices::Device, ipc::{GetRequest, Request, Response, SetRequest}, midi::{ChannelAddress, ChannelParameter, Message}, paths};
 use log::{error, info};
 
-use crate::{config::Config, hooks::Hooks, midi_client::{MidiClient, MidiClientError}, server::{HandlerError, Server, ServerError}, server_state::ServerState};
+use crate::{config::Config, hooks::Hooks, midi_client::{MidiClient, MidiClientError, MidiEvent}, server::{HandlerError, Server, ServerError}, server_state::ServerState};
 
 pub fn run(config: Config, port_name: &str, device: Device) -> Result<(), ServerError> {
     let runtime_path = paths::runtime_dir().unwrap_or_else(|e| {
@@ -20,8 +20,7 @@ pub fn run(config: Config, port_name: &str, device: Device) -> Result<(), Server
     let socket_path = paths::socket_path(&runtime_path);
     let state = Arc::new(RwLock::new(ServerState::default()));
     let hooks = config.hooks();
-    let midi_client = MidiClient::from_port_name(port_name, device, midi_message_handler(state.clone(), hooks.clone()));
-    info!(target: "midi_client", "Using port '{}'", midi_client.port_name());
+    let midi_client = MidiClient::from_port_name(port_name, device, config.midi(), midi_event_handler(state.clone(), hooks.clone()));
 
     let mut server = Server::bind(&socket_path)?;
     info!(target: "server", "Listening on socket at {}", socket_path.display());
@@ -29,9 +28,20 @@ pub fn run(config: Config, port_name: &str, device: Device) -> Result<(), Server
     Ok(())
 }
 
-fn midi_message_handler(state: Arc<RwLock<ServerState>>, hooks: Hooks) -> impl Fn(Message, u64) {
-    move |message, _| {
+fn midi_event_handler(state: Arc<RwLock<ServerState>>, hooks: Hooks) -> impl Fn(MidiEvent) + Send + Sync {
+    move |event| {
         let mut state = state.write().unwrap_or_else(PoisonError::into_inner);
+        let message = match event {
+            MidiEvent::Message(message) => message,
+            MidiEvent::Disconnected => {
+                // cached values are stale once the device is gone (and may be changed
+                // from another computer), so start over when it comes back
+                *state = ServerState::default();
+                return;
+            }
+        };
+        // only count as connected once the device has actually replied
+        state.set_connected();
         match message {
             Message::Status(status) => {
                 let old = state.active_output;
@@ -73,6 +83,9 @@ fn server_handler(mut client: MidiClient, state: Arc<RwLock<ServerState>>, hooks
             }
             Request::Set(s) => {
                 let mut state = state.write().unwrap_or_else(PoisonError::into_inner);
+                if !state.connected {
+                    return Err(HandlerError::NotConnected);
+                }
                 match s {
                     SetRequest::CurrentChannelParameter(_type, value) => {
                         let active_output = state.active_output.ok_or(HandlerError::ActiveOutputUnset)?;

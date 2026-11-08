@@ -9,6 +9,7 @@ type DeviceParameters = HashMap<DeviceParameterType, u16>;
 #[derive(Clone, Debug, Decode, Default, Encode)]
 pub struct State {
     pub active_output: Option<midi::Output>,
+    pub connected: bool,
     channel_parameters: HashMap<ChannelAddress, ChannelParameters>,
     device_parameters: DeviceParameters,
 }
