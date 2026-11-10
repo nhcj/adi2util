@@ -15,6 +15,6 @@ rustPlatform.buildRustPackage {
 
   meta = {
     mainProgram = "adi2ctl";
-    platforms = lib.platforms.linux;
+    platforms = lib.platforms.linux ++ lib.platforms.darwin;
   };
 }

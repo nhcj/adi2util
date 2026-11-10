@@ -1,4 +1,4 @@
-{ lib, rustPlatform, pkg-config, alsa-lib }:
+{ lib, stdenv, rustPlatform, pkg-config, alsa-lib }:
 
 rustPlatform.buildRustPackage {
   pname = "adi2d";
@@ -13,11 +13,11 @@ rustPlatform.buildRustPackage {
   cargoBuildFlags = [ "--package" "adi2d" ];
   cargoTestFlags = [ "--package" "adi2d" ];
 
-  nativeBuildInputs = [ pkg-config ];
-  buildInputs = [ alsa-lib ];
+  nativeBuildInputs = lib.optionals stdenv.hostPlatform.isLinux [ pkg-config ];
+  buildInputs = lib.optionals stdenv.hostPlatform.isLinux [ alsa-lib ];
 
   meta = {
     mainProgram = "adi2d";
-    platforms = lib.platforms.linux;
+    platforms = lib.platforms.linux ++ lib.platforms.darwin;
   };
 }
